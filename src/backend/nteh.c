@@ -93,8 +93,7 @@ void nteh_filltables()
 {
 #if MARS
     symbol *s = s_table;
-    symbol_debug(s);
-    except_fillInEHTable(s);
+    except_gentables(s);
 #endif
 }
 
@@ -107,9 +106,7 @@ void nteh_gentables()
 {
     symbol *s = s_table;
     symbol_debug(s);
-#if MARS
-    //except_fillInEHTable(s);
-#else
+    
     /* NTEH table for C.
      * The table consists of triples:
      *  parent index
@@ -151,7 +148,6 @@ void nteh_gentables()
     }
     assert(sz != 0);
     s->Sdt = dtb.finish();
-#endif
 
     outdata(s);                 // output the scope table
 #if MARS

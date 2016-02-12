@@ -90,12 +90,13 @@ enum PINLINE;
 #define STCreturn        0x100000000000LL // 'return ref' for function parameters
 #define STCautoref       0x200000000000LL // Mark for the already deduced 'auto ref' parameter
 #define STCinference     0x400000000000LL // do attribute inference
+#define STCexport        0x1000000000000LL // Make available accross shared library boundaries.
 
 const StorageClass STCStorageClass = (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal |
     STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias |
     STCout | STCin |
     STCmanifest | STCimmutable | STCshared | STCwild | STCnothrow | STCnogc | STCpure | STCref | STCtls |
-    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable);
+    STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable | STCexport);
 
 struct Match
 {
@@ -306,6 +307,8 @@ public:
     Dsymbol *syntaxCopy(Dsymbol *);
     void semantic(Scope *sc);
     const char *toChars();
+    bool isExport();
+    bool isImportedSymbol();
 
     TypeInfoDeclaration *isTypeInfoDeclaration() { return this; }
     void accept(Visitor *v) { v->visit(this); }

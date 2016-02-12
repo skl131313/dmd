@@ -727,7 +727,15 @@ elem *getTypeInfo(Type t, IRState *irs)
 {
     assert(t.ty != Terror);
     genTypeInfo(t, null);
-    elem *e = el_ptr(toSymbol(t.vtinfo));
+    elem *e = null;
+    if (global.params.useDll && t.vtinfo.isImportedSymbol())
+    {
+      e = el_una(OPind, TYnptr, el_ptr(toImport(t.vtinfo)));
+    }
+    else
+    {
+      e = el_ptr(toSymbol(t.vtinfo));
+    }
     return e;
 }
 
@@ -1115,7 +1123,8 @@ elem *toElem(Expression e, IRState *irs)
                 symbol_add(s);
             }
 
-            if (se.var.isImportedSymbol())
+            // only windows needs special handling for imported symbols
+            if (global.params.useDll && (se.var.isImportedSymbol() || (se.var.isSymbolDeclaration() && se.var.isSymbolDeclaration().dsym.isImportedSymbol())))
             {
                 assert(se.op == TOKvar);
                 e = el_var(toImport(se.var));
@@ -1516,8 +1525,18 @@ elem *toElem(Expression e, IRState *irs)
                 }
                 else
                 {
-                    Symbol *csym = toSymbol(cd);
-                    ex = el_bin(OPcall,TYnptr,el_var(getRtlsym(RTLSYM_NEWCLASS)),el_ptr(csym));
+                    elem* classinfo = null;
+                    if (global.params.useDll && cd.isImportedSymbol())
+                    {
+                        Symbol *csym = toImport(cd);
+                        classinfo = el_una(OPind, TYnptr, el_ptr(csym));
+                    }
+                    else
+                    {
+                        Symbol *csym = toSymbol(cd);
+                        classinfo = el_ptr(csym);
+                    }
+                    ex = el_bin(OPcall, TYnptr, el_var(getRtlsym(RTLSYM_NEWCLASS)), classinfo);
                     toTraceGC(irs, ex, &ne.loc);
                     ectype = null;
 
@@ -4083,17 +4102,21 @@ elem *toElem(Expression e, IRState *irs)
                 }
                 else
                 {
-                    /* The offset from cdfrom => cdto can only be determined at runtime.
-                     * Cases:
-                     *  - class     => derived class (downcast)
-                     *  - interface => derived class (downcast)
-                     *  - class     => foreign interface (cross cast)
-                     *  - interface => base or foreign interface (cross cast)
+                    /* The offset from cdfrom=>cdto can only be determined at runtime.
                      */
+                    elem *ep = null;
+                    if (global.params.useDll && cdto.isImportedSymbol())
+                    {
+                        ep = el_param(el_una(OPind, TYnptr, el_ptr(toImport(cdto))), e);
+                    }
+                    else
+                    {
+                        ep = el_param(el_ptr(toSymbol(cdto)), e);
+                    }
+
                     int rtl = cdfrom.isInterfaceDeclaration()
                                 ? RTLSYM_INTERFACE_CAST
                                 : RTLSYM_DYNAMIC_CAST;
-                    elem *ep = el_param(el_ptr(toSymbol(cdto)), e);
                     e = el_bin(OPcall, TYnptr, el_var(getRtlsym(rtl)), ep);
                 }
                 goto Lret;
@@ -5374,7 +5397,16 @@ elem *toElemStructLit(StructLiteralExp sle, IRState *irs, TOK op, Symbol *sym, b
 
     if (sle.useStaticInit)
     {
-        elem *e = el_var(toInitializer(sle.sd));
+        elem *e;
+        if (global.params.useDll && sle.sd.isImportedSymbol())
+        {
+            Symbol* sinit = toInitializer(sle.sd);
+            e = el_una(OPind, sinit.Stype.Tty, el_var(toImport(sinit)));
+        }
+        else
+        {
+            e = el_var(toInitializer(sle.sd));
+        }
         e.ET = Type_toCtype(sle.sd.type);
         elem_setLoc(e, sle.loc);
 

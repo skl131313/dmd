@@ -3086,6 +3086,7 @@ extern (C++) const(char)* stcToChars(ref StorageClass stc)
         SCstring(STCtrusted, TOKat, "@trusted"),
         SCstring(STCsystem, TOKat, "@system"),
         SCstring(STCdisable, TOKat, "@disable"),
+        SCstring(STCexport, TOKexport),
         SCstring(0, TOKreserved)
     ];
     for (int i = 0; table[i].stc; i++)
@@ -3195,8 +3196,6 @@ extern (C++) const(char)* protectionToChars(PROTKIND kind)
         return "protected";
     case PROTpublic:
         return "public";
-    case PROTexport:
-        return "export";
     default:
         assert(0);
     }

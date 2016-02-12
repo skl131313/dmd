@@ -93,7 +93,7 @@
   <libpaths />
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
+  <exefile>$(OutDir)\dmd.exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>2</cRuntime>
   <privatePhobos>0</privatePhobos>
@@ -218,7 +218,7 @@
   <verbose>0</verbose>
   <vtls>0</vtls>
   <vgc>0</vgc>
-  <symdebug>1</symdebug>
+  <symdebug>2</symdebug>
   <optimize>0</optimize>
   <cpu>0</cpu>
   <isX86_64>1</isX86_64>
@@ -240,7 +240,7 @@
   <useUnitTests>0</useUnitTests>
   <useInline>0</useInline>
   <release>0</release>
-  <preservePaths>0</preservePaths>
+  <preservePaths>1</preservePaths>
   <warnings>0</warnings>
   <infowarnings>0</infowarnings>
   <checkProperty>0</checkProperty>
@@ -253,10 +253,10 @@
   <allinst>0</allinst>
   <stackStomp>0</stackStomp>
   <compiler>0</compiler>
-  <otherDMD>0</otherDMD>
+  <otherDMD>1</otherDMD>
   <cccmd>$(CC) -nologo -c -TP -Isrc -Isrc\backend -Isrc\tk -Isrc\root -Isrc\vcbuild -Igenerated -DTARGET_WINDOS=1 -FIvcbuild\warnings.h</cccmd>
   <ccTransOpt>1</ccTransOpt>
-  <program>c:\l\d\dmd2\windows\bin\dmd.exe</program>
+  <program>C:\digital-mars\dmd2-71\windows\bin\dmd.exe</program>
   <imppath />
   <fileImppath>generated ..\..\res</fileImppath>
   <outdir>generated\$(ConfigurationName)_$(PlatformName)</outdir>
@@ -271,7 +271,7 @@
   <doHdrGeneration>0</doHdrGeneration>
   <hdrdir />
   <hdrname />
-  <doXGeneration>1</doXGeneration>
+  <doXGeneration>0</doXGeneration>
   <xfilename>$(IntDir)\$(TargetName).json</xfilename>
   <debuglevel>0</debuglevel>
   <debugids />
@@ -297,7 +297,7 @@
   <libpaths />
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
+  <exefile>$(OutDir)\dmd.exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>2</cRuntime>
   <privatePhobos>0</privatePhobos>
@@ -355,10 +355,10 @@
   <allinst>0</allinst>
   <stackStomp>0</stackStomp>
   <compiler>0</compiler>
-  <otherDMD>0</otherDMD>
+  <otherDMD>1</otherDMD>
   <cccmd>$(CC) -nologo -c -TP -Isrc -Isrc\backend -Isrc\tk -Isrc\root -Isrc\vcbuild -Igenerated -DTARGET_WINDOS=1 -FIvcbuild\warnings.h</cccmd>
   <ccTransOpt>1</ccTransOpt>
-  <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
+  <program>C:\digital-mars\dmd2-72\windows\bin\dmd.exe</program>
   <imppath />
   <fileImppath>generated ..\..\res</fileImppath>
   <outdir>generated\$(ConfigurationName)_$(PlatformName)</outdir>
@@ -399,7 +399,7 @@
   <libpaths />
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
+  <exefile>$(OutDir)\dmd.exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>1</cRuntime>
   <privatePhobos>0</privatePhobos>
