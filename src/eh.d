@@ -16,6 +16,7 @@ import core.stdc.stdlib;
 import core.stdc.string;
 
 import ddmd.globals;
+import ddmd.todt;
 
 import ddmd.backend.cc;
 import ddmd.backend.cdef;
@@ -27,6 +28,7 @@ import ddmd.backend.global;
 import ddmd.backend.obj;
 import ddmd.backend.ty;
 import ddmd.backend.type;
+import ddmd.root.array;
 
 extern (C++):
 
@@ -58,10 +60,10 @@ Symbol *except_gentables()
         symbol_keep(s);
         //symbol_debug(s);
 
-        except_fillInEHTable(s);
-
+        Array!DataSymbolRef dataSymbolRefs;
+        except_fillInEHTable(s, &dataSymbolRefs);
         outdata(s);                 // output the scope table
-
+        objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
         objmod.ehtables(funcsym_p,funcsym_p.Ssize,s);
     }
     return null;
@@ -86,7 +88,7 @@ Symbol *except_gentables()
  * }
  */
 
-void except_fillInEHTable(Symbol *s)
+void except_fillInEHTable(Symbol *s, Array!DataSymbolRef* dataSymbolRefs)
 {
     uint fsize = NPTRSIZE;             // target size of function pointer
     scope dtb = new DtBuilder();
@@ -357,6 +359,15 @@ void except_fillInEHTable(Symbol *s)
 
                 dtb.xoff(bcatch.Bcatchtype,0,TYnptr);
 
+                if (bcatch.Bcatchimported)
+                {
+                    assert(dataSymbolRefs !is null);
+                    DataSymbolRef symRef;
+                    symRef.offsetInDt = sz;
+                    symRef.referenceOffset = 0;
+                    dataSymbolRefs.push(symRef);
+                }
+
                 dtb.size(cod3_bpoffset(b.jcatchvar));     // EBP offset
 
                 // catch handler address
@@ -376,3 +387,9 @@ void except_fillInEHTable(Symbol *s)
     s.Sdt = dtb.finish();
 }
 
+void except_gentables(Symbol* s)
+{
+    Array!DataSymbolRef dataSymbolRefs;
+    except_fillInEHTable(s, &dataSymbolRefs);
+    objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
+}

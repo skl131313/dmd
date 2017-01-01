@@ -94,6 +94,7 @@ void genModuleInfo(Module m)
 
     scope dtb = new DtBuilder();
     ClassDeclarations aclasses;
+    Array!DataSymbolRef dataSymbolRefs;
 
     //printf("members.dim = %d\n", members.dim);
     foreach (i; 0 .. m.members.dim)
@@ -183,12 +184,28 @@ void genModuleInfo(Module m)
 
             Symbol *s = toSymbol(mod);
 
-            /* Weak references don't pull objects in from the library,
-             * they resolve to 0 if not pulled in by something else.
-             * Don't pull in a module just because it was imported.
-             */
-            s.Sflags |= SFLweak;
-            dtb.xoff(s, 0, TYnptr);
+            // if we are compiling with shared libraries and the module is not part of the current compilation
+            // we must assume that it is imported.
+            if (global.params.isWindows && global.params.useDll && !mod.isRoot())
+            {
+                Symbol* isym = toImport(s);
+                isym.Sflags |= SFLweak;
+                DataSymbolRef newRef;
+                newRef.offsetInDt = dtb.length();
+                newRef.referenceOffset = 0;
+                dataSymbolRefs.push(newRef);
+                dtb.xoff(isym, 0, TYnptr);
+            }
+            else
+            {
+                /* Weak references don't pull objects in from the library,
+                * they resolve to 0 if not pulled in by something else.
+                * Don't pull in a module just because it was imported.
+                */
+                s.Sflags |= SFLweak;
+                dtb.xoff(s, 0, TYnptr);
+            }
+
         }
     }
     if (flags & MIlocalClasses)
@@ -212,12 +229,25 @@ void genModuleInfo(Module m)
 
     objc_Module_genmoduleinfo_classes();
     m.csym.Sdt = dtb.finish();
-    out_readonly(m.csym);
-    outdata(m.csym);
+
+    if (global.params.isWindows)
+    {
+        if (dataSymbolRefs.dim == 0)
+            out_readonly(m.csym);
+        outdata(m.csym);
+        objmod.markCrossDllDataRef(m.csym, dataSymbolRefs.data, dataSymbolRefs.dim);
+    }
+    else
+    {
+        out_readonly(m.csym);
+        outdata(m.csym);
+    }
 
     //////////////////////////////////////////////
 
     objmod.moduleinfo(msym);
+    // we always have to export the module info because we never now if it might get referenced by a template instanciated on the user side.
+    objmod.export_data_symbol(msym);
 }
 
 /* ================================================================== */
@@ -303,10 +333,30 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 sinit.Sclass = scclass;
                 sinit.Sfl = FLdata;
                 scope dtb = new DtBuilder();
-                ClassDeclaration_toDt(cd, dtb);
+                Array!DataSymbolRef dataSymbolRefsInit;
+                ClassDeclaration_toDt(cd, dtb, &dataSymbolRefsInit);
                 sinit.Sdt = dtb.finish();
+                // only if there are no cross dll data refernces the initializer can be read only.
+                if (dataSymbolRefsInit.dim == 0)
+                    out_readonly(sinit);
                 out_readonly(sinit);
                 outdata(sinit);
+                objmod.markCrossDllDataRef(sinit, dataSymbolRefsInit.data, dataSymbolRefsInit.dim);
+            }
+
+            // the init symbol of a type info is referenced directly, so it needs to be exported
+            if (cd.isExport())
+            {
+                ClassDeclaration base = cd.baseClass;
+                while (base)
+                {
+                    if (base.ident == Id.TypeInfo)
+                    {
+                        objmod.export_data_symbol(sinit);
+                        break;
+                    }
+                    base = base.baseClass;
+                }
             }
 
             //////////////////////////////////////////////
@@ -341,6 +391,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                     //TypeInfo typeinfo;
                }
              */
+            Array!DataSymbolRef dataSymbolRefsClassInfo;
             uint offset = Target.classinfosize;    // must be ClassInfo.size
             if (Type.typeinfoclass)
             {
@@ -355,7 +406,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             scope dtb = new DtBuilder();
 
             if (Type.typeinfoclass)            // vtbl for TypeInfo_Class : ClassInfo
-                dtb.xoff(toVtblSymbol(Type.typeinfoclass), 0, TYnptr);
+                dtxoffVtbl(dtb, Type.typeinfoclass, &dataSymbolRefsClassInfo);
             else
                 dtb.size(0);                    // BUG: should be an assert()
             dtb.size(0);                        // monitor
@@ -392,7 +443,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
 
             // base
             if (cd.baseClass)
-                dtb.xoff(toSymbol(cd.baseClass), 0, TYnptr);
+                dtxoffDsymbol(dtb, cd.baseClass, 0, &dataSymbolRefsClassInfo);
             else
                 dtb.size(0);
 
@@ -461,7 +512,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
 
             // m_RTInfo
             if (cd.getRTInfo)
-                Expression_toDt(cd.getRTInfo, dtb);
+                Expression_toDt(cd.getRTInfo, dtb, &dataSymbolRefsClassInfo);
             else if (flags & ClassFlags.noPointers)
                 dtb.size(0);
             else
@@ -493,7 +544,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 b.fillVtbl(cd, &b.vtbl, 1);
 
                 // classinfo
-                dtb.xoff(toSymbol(id), 0, TYnptr);
+                dtxoffDsymbol(dtb, id, 0, &dataSymbolRefsClassInfo);
 
                 // vtbl[]
                 dtb.size(id.vtbl.dim);
@@ -614,7 +665,9 @@ void toObjFile(Dsymbol ds, bool multiobj)
             // ClassInfo cannot be const data, because we use the monitor on it
             outdata(cd.csym);
             if (cd.isExport())
-                objmod.export_symbol(cd.csym, 0);
+                objmod.export_data_symbol(cd.csym);
+            if (global.params.isWindows)
+                objmod.markCrossDllDataRef(cd.csym, dataSymbolRefsClassInfo.data, dataSymbolRefsClassInfo.dim);
 
             //////////////////////////////////////////////
 
@@ -688,7 +741,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             out_readonly(cd.vtblsym);
             outdata(cd.vtblsym);
             if (cd.isExport())
-                objmod.export_symbol(cd.vtblsym,0);
+                objmod.export_data_symbol(cd.vtblsym);
         }
 
         override void visit(InterfaceDeclaration id)
@@ -752,9 +805,10 @@ void toObjFile(Dsymbol ds, bool multiobj)
                }
              */
             scope dtb = new DtBuilder();
+            Array!DataSymbolRef dataSymbolRefs;
 
             if (Type.typeinfoclass)
-                dtb.xoff(toVtblSymbol(Type.typeinfoclass), 0, TYnptr); // vtbl for ClassInfo
+                dtxoffVtbl(dtb, Type.typeinfoclass, &dataSymbolRefs); // vtbl for ClassInfo
             else
                 dtb.size(0);                    // BUG: should be an assert()
             dtb.size(0);                        // monitor
@@ -823,7 +877,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
 
             // m_RTInfo
             if (id.getRTInfo)
-                Expression_toDt(id.getRTInfo, dtb);
+                Expression_toDt(id.getRTInfo, dtb, &dataSymbolRefs);
             else
                 dtb.size(0);       // no pointers
 
@@ -841,7 +895,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 ClassDeclaration base = b.sym;
 
                 // classinfo
-                dtb.xoff(toSymbol(base), 0, TYnptr);
+                dtxoffDsymbol(dtb, base, 0, &dataSymbolRefs);
 
                 // vtbl[]
                 dtb.size(0);
@@ -860,10 +914,15 @@ void toObjFile(Dsymbol ds, bool multiobj)
             dtb.nzeros(cast(uint)namepad);
 
             id.csym.Sdt = dtb.finish();
-            out_readonly(id.csym);
+
+            if (!global.params.isWindows || dataSymbolRefs.dim == 0)
+                out_readonly(id.csym);
             outdata(id.csym);
             if (id.isExport())
-                objmod.export_symbol(id.csym, 0);
+                objmod.export_data_symbol(id.csym);
+            if (global.params.isWindows)
+                objmod.markCrossDllDataRef(id.csym, dataSymbolRefs.data, dataSymbolRefs.dim);
+
         }
 
         override void visit(StructDeclaration sd)
@@ -904,10 +963,15 @@ void toObjFile(Dsymbol ds, bool multiobj)
 
                 sd.sinit.Sfl = FLdata;
                 scope dtb = new DtBuilder();
-                StructDeclaration_toDt(sd, dtb);
+                Array!DataSymbolRef dataSymbolRefs;
+                StructDeclaration_toDt(sd, dtb, &dataSymbolRefs);
                 sd.sinit.Sdt = dtb.finish();
-                out_readonly(sd.sinit);    // put in read-only segment
+                if (dataSymbolRefs.dim == 0)
+                    out_readonly(sd.sinit);    // put in read-only segment
                 outdata(sd.sinit);
+                if (sd.isExport())
+                    objmod.export_data_symbol(sd.sinit);
+                objmod.markCrossDllDataRef(sd.sinit, dataSymbolRefs.data, dataSymbolRefs.dim);
 
                 // Put out the members
                 for (size_t i = 0; i < sd.members.dim; i++)
@@ -986,23 +1050,24 @@ void toObjFile(Dsymbol ds, bool multiobj)
             } while (parent);
             s.Sfl = FLdata;
 
+            Array!DataSymbolRef dataSymbolRefs;
             if (config.objfmt == OBJ_MACH && global.params.is64bit && (s.Stype.Tty & mTYLINK) == mTYthread)
             {
                 scope dtb = new DtBuilder();
-                tlsToDt(vd, s, dtb);
+                tlsToDt(vd, s, dtb, &dataSymbolRefs);
                 s.Sdt = dtb.finish();
             }
 
             else if (vd._init)
             {
                 scope dtb = new DtBuilder();
-                initializerToDt(vd, dtb);
+                initializerToDt(vd, dtb, null);
                 s.Sdt = dtb.finish();
             }
             else
             {
                 scope dtb = new DtBuilder();
-                Type_toDt(vd.type, dtb);
+                Type_toDt(vd.type, dtb, null);
                 s.Sdt = dtb.finish();
             }
 
@@ -1024,7 +1089,8 @@ void toObjFile(Dsymbol ds, bool multiobj)
             {
                 outdata(s);
                 if (vd.isExport())
-                    objmod.export_symbol(s, 0);
+                    objmod.export_data_symbol(s);
+                objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
             }
         }
 
@@ -1063,7 +1129,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 ed.sinit.Sclass = scclass;
                 ed.sinit.Sfl = FLdata;
                 scope dtb = new DtBuilder();
-                Expression_toDt(tc.sym.defaultval, dtb);
+                Expression_toDt(tc.sym.defaultval, dtb, null);
                 ed.sinit.Sdt = dtb.finish();
                 outdata(ed.sinit);
             }
@@ -1090,7 +1156,8 @@ void toObjFile(Dsymbol ds, bool multiobj)
             s.Sfl = FLdata;
 
             scope dtb = new DtBuilder();
-            TypeInfo_toDt(dtb, tid);
+            Array!DataSymbolRef dataSymbolRefs;
+            TypeInfo_toDt(dtb, tid, &dataSymbolRefs);
             s.Sdt = dtb.finish();
 
             // See if we can convert a comdat to a comdef,
@@ -1104,7 +1171,8 @@ void toObjFile(Dsymbol ds, bool multiobj)
 
             outdata(s);
             if (tid.isExport())
-                objmod.export_symbol(s, 0);
+                objmod.export_data_symbol(s);
+            objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
         }
 
         override void visit(AttribDeclaration ad)
@@ -1228,9 +1296,9 @@ void toObjFile(Dsymbol ds, bool multiobj)
         }
 
     private:
-        static void initializerToDt(VarDeclaration vd, DtBuilder dtb)
+        static void initializerToDt(VarDeclaration vd, DtBuilder dtb, Array!DataSymbolRef* dataSymbolRefs)
         {
-            Initializer_toDt(vd._init, dtb);
+            Initializer_toDt(vd._init, dtb, dataSymbolRefs);
 
             // Look for static array that is block initialized
             ExpInitializer ie = vd._init.isExpInitializer();
@@ -1246,7 +1314,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 // Duplicate Sdt 'dim-1' times, as we already have the first one
                 while (--dim > 0)
                 {
-                    Expression_toDt(ie.exp, dtb);
+                    Expression_toDt(ie.exp, dtb, dataSymbolRefs);
                 }
             }
         }
@@ -1277,7 +1345,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
          *      vd  the variable declaration for the symbol
          *      s   the symbol to output
          */
-        static void tlsToDt(VarDeclaration vd, Symbol *s, DtBuilder dtb)
+        static void tlsToDt(VarDeclaration vd, Symbol *s, DtBuilder dtb, Array!DataSymbolRef* dataSymbolRefs)
         {
             assert(config.objfmt == OBJ_MACH && global.params.is64bit && (s.Stype.Tty & mTYLINK) == mTYthread);
 
@@ -1285,9 +1353,9 @@ void toObjFile(Dsymbol ds, bool multiobj)
             scope tlvInitDtb = new DtBuilder();
 
             if (vd._init)
-                initializerToDt(vd, tlvInitDtb);
+                initializerToDt(vd, tlvInitDtb, dataSymbolRefs);
             else
-                Type_toDt(vd.type, tlvInitDtb);
+                Type_toDt(vd.type, tlvInitDtb, dataSymbolRefs);
 
             tlvInit.Sdt = tlvInitDtb.finish();
             outdata(tlvInit);

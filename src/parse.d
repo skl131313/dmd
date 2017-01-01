@@ -351,6 +351,12 @@ final class Parser : Lexer
                             nextToken();
                         break;
                     }
+                case TOKexport:
+                    {
+                        mod.isExport = true;
+                        nextToken();
+                        break;
+                    }
                 default:
                     {
                         error("'module' expected instead of %s", token.toChars());
@@ -762,6 +768,10 @@ final class Parser : Lexer
                 stc = STCgshared;
                 goto Lstc;
 
+            case TOKexport:
+                stc = STCexport;
+                goto Lstc;
+
             //case TOKmanifest:   stc = STCmanifest;     goto Lstc;
 
             case TOKat:
@@ -948,9 +958,6 @@ final class Parser : Lexer
                 prot = PROTpublic;
                 goto Lprot;
 
-            case TOKexport:
-                prot = PROTexport;
-                goto Lprot;
             Lprot:
                 {
                     if (pAttrs.protection.kind != PROTundefined)
@@ -1389,7 +1396,7 @@ final class Parser : Lexer
     }
 
     /***********************************************
-     * Parse const/immutable/shared/inout/nothrow/pure postfix
+     * Parse const/immutable/shared/inout/nothrow/pure/export postfix
      */
     StorageClass parsePostfix(StorageClass storageClass, Expressions** pudas)
     {
@@ -1424,6 +1431,10 @@ final class Parser : Lexer
 
             case TOKreturn:
                 stc = STCreturn;
+                break;
+
+            case TOKexport:
+                stc = STCexport;
                 break;
 
             case TOKscope:
@@ -3770,7 +3781,7 @@ final class Parser : Lexer
         assert(0);
     }
 
-    Type parseDeclarator(Type t, int* palt, Identifier* pident, TemplateParameters** tpl = null, StorageClass storageClass = 0, int* pdisable = null, Expressions** pudas = null)
+    Type parseDeclarator(Type t, int* palt, Identifier* pident, TemplateParameters** tpl = null, StorageClass storageClass = 0, int* pdisable = null, Expressions** pudas = null, int* pexport = null)
     {
         //printf("parseDeclarator(tpl = %p)\n", tpl);
         t = parseBasicType2(t);
@@ -3908,7 +3919,7 @@ final class Parser : Lexer
                     int varargs;
                     Parameters* parameters = parseParameters(&varargs);
 
-                    /* Parse const/immutable/shared/inout/nothrow/pure/return postfix
+                    /* Parse const/immutable/shared/inout/nothrow/pure/return/export postfix
                      */
                     // merge prefix storage classes
                     StorageClass stc = parsePostfix(storageClass, pudas);
@@ -3917,6 +3928,8 @@ final class Parser : Lexer
                     tf = tf.addSTC(stc);
                     if (pdisable)
                         *pdisable = stc & STCdisable ? 1 : 0;
+                    if (pexport)
+                        *pexport = stc & STCexport ? 1 : 0;
 
                     /* Insert tf into
                      *   ts -> ... -> t
@@ -4010,6 +4023,10 @@ final class Parser : Lexer
 
             case TOKpure:
                 stc = STCpure;
+                goto L1;
+
+            case TOKexport:
+                stc = STCexport;
                 goto L1;
 
             case TOKref:
@@ -4337,15 +4354,19 @@ final class Parser : Lexer
             TemplateParameters* tpl = null;
             int disable;
             int alt = 0;
+            int export_;
 
             loc = token.loc;
             ident = null;
-            t = parseDeclarator(ts, &alt, &ident, &tpl, storage_class, &disable, &udas);
+            t = parseDeclarator(ts, &alt, &ident, &tpl, storage_class, &disable, &udas, &export_);
             assert(t);
             if (!tfirst)
                 tfirst = t;
             else if (t != tfirst)
                 error("multiple declarations must have the same type, not %s and %s", tfirst.toChars(), t.toChars());
+
+            if (export_)
+                storage_class |= STCexport;
 
             bool isThis = (t.ty == Tident && (cast(TypeIdentifier)t).ident == Id.This && token.value == TOKassign);
             if (ident)
@@ -4991,6 +5012,7 @@ final class Parser : Lexer
         case TOKunion:
         case TOKclass:
         case TOKinterface:
+        case TOKexport:
         Ldeclaration:
             {
                 Dsymbols* a = parseDeclarations(false, null, null);
@@ -6889,6 +6911,7 @@ final class Parser : Lexer
             case TOKoverride:
             case TOKabstract:
             case TOKsynchronized:
+            case TOKexport:
                 break;
 
             case TOKdeprecated:

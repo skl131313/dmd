@@ -762,7 +762,14 @@ extern (C++) class S2irVisitor : Visitor
 
         //printf("SwitchErrorStatement.toIR()\n");
 
-        elem *efilename = el_ptr(toSymbol(cast(Dsymbol)blx._module));
+        Module module_ = cast(Module)blx._module;
+        elem* efilename;
+
+        if (global.params.isWindows && global.params.useDll && !module_.isRoot())
+            efilename = el_una(OPind, TYnptr, el_ptr(toImport(module_)));
+        else
+            efilename = el_ptr(toSymbol(module_));
+
         elem *elinnum = el_long(TYint, s.loc.linnum);
         elem *e = el_bin(OPcall, TYvoid, el_var(getRtlsym(RTLSYM_DSWITCHERR)), el_param(elinnum, efilename));
         block_appendexp(blx.curblock, e);
@@ -1243,7 +1250,21 @@ extern (C++) class S2irVisitor : Visitor
                     cs.var.csym = tryblock.jcatchvar;
                 block *bcatch = blx.curblock;
                 if (cs.type)
-                    bcatch.Bcatchtype = toSymbol(cs.type.toBasetype());
+                {
+                    Type basetype = cs.type.toBasetype();
+                    bcatch.Bcatchimported = false;
+                    ClassDeclaration basetypeClass = basetype.isClassHandle();
+                    assert(basetypeClass !is null); // D can only catch classes
+                    if (global.params.mscoff && global.params.useDll && basetypeClass.isImportedSymbol())
+                    {
+                        bcatch.Bcatchimported = true;
+                        bcatch.Bcatchtype = toImport(basetypeClass);
+                    }
+                    else
+                    {
+                        bcatch.Bcatchtype = toSymbol(basetype);
+                    }
+                }
                 tryblock.appendSucc(bcatch);
                 block_goto(blx, BCjcatch, null);
                 if (cs.handler !is null)

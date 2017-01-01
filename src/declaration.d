@@ -16,6 +16,7 @@ import ddmd.arraytypes;
 import ddmd.dcast;
 import ddmd.dclass;
 import ddmd.delegatize;
+import ddmd.dmodule;
 import ddmd.dscope;
 import ddmd.dstruct;
 import ddmd.dsymbol;
@@ -35,6 +36,7 @@ import ddmd.root.rootobject;
 import ddmd.sideeffect;
 import ddmd.target;
 import ddmd.tokens;
+import ddmd.typinf;
 import ddmd.visitor;
 
 /************************************
@@ -128,12 +130,13 @@ enum STCautoref             = (1L << 45);   // Mark for the already deduced 'aut
 enum STCinference           = (1L << 46);   // do attribute inference
 enum STCexptemp             = (1L << 47);   // temporary variable that has lifetime restricted to an expression
 enum STCmaybescope          = (1L << 48);   // parameter might be 'scope'
+enum STCexport              = (1L << 49);
 
 enum STC_TYPECTOR = (STCconst | STCimmutable | STCshared | STCwild);
 enum STC_FUNCATTR = (STCref | STCnothrow | STCnogc | STCpure | STCproperty | STCsafe | STCtrusted | STCsystem);
 
 extern (C++) __gshared const(StorageClass) STCStorageClass =
-    (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal | STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias | STCout | STCin | STCmanifest | STCimmutable | STCshared | STCwild | STCnothrow | STCnogc | STCpure | STCref | STCtls | STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable);
+    (STCauto | STCscope | STCstatic | STCextern | STCconst | STCfinal | STCabstract | STCsynchronized | STCdeprecated | STCoverride | STClazy | STCalias | STCout | STCin | STCmanifest | STCimmutable | STCshared | STCwild | STCnothrow | STCnogc | STCpure | STCref | STCtls | STCgshared | STCproperty | STCsafe | STCtrusted | STCsystem | STCdisable | STCexport);
 
 struct Match
 {
@@ -2043,16 +2046,55 @@ extern (C++) class VarDeclaration : Declaration
         return isField();
     }
 
-    override final bool isExport()
+    override bool isExport()
     {
-        return protection.kind == PROTexport;
+        // if the symbol does not go into the data segment we can't export it
+        if (!isDataseg())
+            return false;
+        // if the symbol is thread local we can't export it either, as cross dll thread local doesn't work.
+        if (isThreadlocal())
+            return false;
+        if (storage_class & STCexport) // if directly exported, even if private
+            return true;
+        if (protection.kind <= PROTprivate) // not accessible, no need to check parents
+            return false;
+        // check if any of the parents is a class/struct and if they are exported
+        Dsymbol realParent = parent;
+        while (true)
+        {
+            TemplateMixin templateMixin = realParent.isTemplateMixin();
+            if (templateMixin !is null)
+            {
+                realParent = templateMixin.parent;
+            }
+            else
+            {
+                break;
+            }
+        }
+        if (AggregateDeclaration c = realParent.isAggregateDeclaration())
+        {
+            return c.isExport();
+        }
+        return false;
     }
 
-    override final bool isImportedSymbol()
+    override bool isImportedSymbol()
     {
-        if (protection.kind == PROTexport && !_init && (storage_class & STCstatic || parent.isModule()))
-            return true;
-        return false;
+        if (!isExport())
+            return false;
+        Dsymbol curParent = parent;
+        if (parent is null)
+            return false;
+        Module _module = curParent.isModule();
+        while (_module is null)
+        {
+            curParent = curParent.parent;
+            if (curParent is null)
+                return false;
+            _module = curParent.isModule();
+        }
+        return !_module.isRoot();
     }
 
     /*******************************
@@ -2491,6 +2533,52 @@ extern (C++) class TypeInfoDeclaration : VarDeclaration
         buf.writestring(tinfo.toChars());
         buf.writeByte(')');
         return buf.extractString();
+    }
+
+    override final bool isExport()
+    {
+        // special handling for classes because they are considered builtin for whatever reason
+        if (tinfo.ty == Tclass)
+        {
+            Dsymbol dsym = tinfo.toDsymbol(null);
+            if (dsym)
+                return dsym.isExport();
+        }
+        // For builtin type infos forward to the actual implementation.
+        if (builtinTypeInfo(tinfo))
+            return type.toDsymbol(null).isExport();
+        // find the end of the type chain
+        Type baseType = tinfo;
+        for (Type nextType = baseType.nextOf(); nextType !is null; nextType = baseType.nextOf())
+        {
+          baseType = nextType;
+        }
+        // if we get a symbol its user defined and we can check if the user defined exports or not
+        // if we don't get a symbol is a builtin type and we always export
+        Dsymbol sym = baseType.toDsymbol(null);
+        return (sym !is null) ? sym.isExport() : true;
+    }
+
+    override final bool isImportedSymbol()
+    {
+        // special handling for classes because they are considered builtin for whatever reason
+        if (tinfo.ty == Tclass)
+        {
+            Dsymbol dsym = tinfo.toDsymbol(null);
+            if (dsym)
+                return dsym.isImportedSymbol();
+        }
+        // For builtin type infos forward to the actual implementation.
+        if (builtinTypeInfo(tinfo))
+            return type.toDsymbol(null).isImportedSymbol();
+        // if we don't have a parent the type info has been instanciated during
+        // a genObj phase. That means its definitly local.
+        if (parent is null)
+            return false;
+        Module m = parent.isModule();
+        assert(m); // parent should always be a module
+        // if the module that instanciated the type info is not a root module we need to import the type info.
+        return !m.isRoot() && this.isExport();
     }
 
     override final inout(TypeInfoDeclaration) isTypeInfoDeclaration() inout

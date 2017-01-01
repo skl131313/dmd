@@ -510,6 +510,15 @@ void genObjFile(Module m, bool multiobj)
     if (!global.params.betterC)
         genhelpers(m);
 
+    if (m.massert && m.isExport && m.isRoot())
+        objmod.export_symbol(m.massert, 0);
+
+    if (m.marray && m.isExport && m.isRoot())
+        objmod.export_symbol(m.marray, 0);
+
+    if (m.munittest && m.isExport && m.isRoot())
+        objmod.export_symbol(m.munittest, 0);
+
     objmod.termfile();
 }
 

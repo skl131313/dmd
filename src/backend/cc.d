@@ -464,6 +464,7 @@ struct block
             struct
             {
                 Symbol* Bcatchtype;     // one type for each catch block
+                bool Bcatchimported;
                 uint* actionTable;      // EH_DWARF: indices into typeTable, first is # of entries
             }                           // BCjcatch
         }
