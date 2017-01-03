@@ -1124,7 +1124,7 @@ elem *toElem(Expression e, IRState *irs)
 
             // only Windows needs special handling for imported symbols
             if (global.params.isWindows && global.params.useDll
-                && (se.var.isImportedSymbol() || (se.var.isSymbolDeclaration() && se.var.isImportedSymbol())))
+                && (se.var.isImportedSymbol() || (se.var.isSymbolDeclaration() && se.var.isSymbolDeclaration().dsym.isImportedSymbol())))
             {
                 assert(se.op == TOKvar);
                 e = el_var(toImport(se.var));
