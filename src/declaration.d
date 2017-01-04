@@ -34,6 +34,7 @@ import ddmd.mtype;
 import ddmd.root.outbuffer;
 import ddmd.root.rootobject;
 import ddmd.sideeffect;
+import ddmd.statement;
 import ddmd.target;
 import ddmd.tokens;
 import ddmd.typinf;
@@ -1051,6 +1052,8 @@ extern (C++) class VarDeclaration : Declaration
     Expression edtor;               // if !=null, does the destruction of the variable
     IntRange* range;                // if !=null, the variable is known to be within the range
 
+    FuncDeclaration tlsAccessor;    // NOCOMMIT // used to access exported TLS variables
+
     final extern (D) this(Loc loc, Type type, Identifier id, Initializer _init, StorageClass storage_class = STCundefined)
     {
         super(id);
@@ -1835,6 +1838,43 @@ extern (C++) class VarDeclaration : Declaration
             }
         }
 
+        // NOCOMMIT
+        // TODO right location?
+        // Windows only to allow TLS access across DLL, only generate when is TLS and export
+        if (global.params.isWindows && isExport() && isThreadlocal())
+        {
+            // TODO make a generate tlsstub function ?
+            OutBuffer buf;
+            buf.writestring("__tlsstub__");
+            buf.writestring(toChars());
+
+            auto id = Identifier.generateId(buf.peekString());
+            auto tf = new TypeFunction(null, null, 0, LINKd);
+            auto fdtls = new FuncDeclaration(loc, loc, id, STCexport | STCstatic, tf);
+            fdtls.generated = true;
+
+            Expression e1 = new VarExp(loc, this);
+            fdtls.fbody = new ReturnStatement(loc, e1.addressOf());
+
+            Scope* sc2 = sc.push();
+
+            // only attach to module if that is where the variable is defined
+            if (!isImportedSymbol())
+            {
+                sc._module.importedFrom.members.push(fdtls);
+                sc2.parent = sc._module.importedFrom;
+            }
+
+            sc2.stc = 0;
+            sc2.linkage = LINKd;
+            fdtls.semantic(sc2);
+            fdtls.semantic2(sc2);
+            fdtls.semantic3(sc2);
+            sc2.pop();
+
+            tlsAccessor = fdtls;
+        }
+
         semanticRun = PASSsemanticdone;
 
         if (type.toBasetype().ty == Terror)
@@ -2051,9 +2091,10 @@ extern (C++) class VarDeclaration : Declaration
         // if the symbol does not go into the data segment we can't export it
         if (!isDataseg())
             return false;
+        // TODO NOCOMMIT
         // if the symbol is thread local we can't export it either, as cross dll thread local doesn't work.
-        if (isThreadlocal())
-            return false;
+        // if (isThreadlocal())
+        //     return false;
         if (storage_class & STCexport) // if directly exported, even if private
             return true;
         if (protection.kind <= PROTprivate) // not accessible, no need to check parents

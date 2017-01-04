@@ -1127,8 +1127,18 @@ elem *toElem(Expression e, IRState *irs)
                 && (se.var.isImportedSymbol() || (se.var.isSymbolDeclaration() && se.var.isSymbolDeclaration().dsym.isImportedSymbol())))
             {
                 assert(se.op == TOKvar);
-                e = el_var(toImport(se.var));
-                e = el_una(OPind,s.Stype.Tty,e);
+                if (se.var.isThreadlocal()) // NOCOMMIT
+                {
+                    e = el_var(toImport(se.var));
+                    e = el_una(OPind, TYnptr, e);
+                    e = el_una(OPucall, TYnptr, e);
+                    e = el_una(OPind, s.Stype.Tty, e);
+                }
+                else
+                {
+                    e = el_var(toImport(se.var));
+                    e = el_una(OPind,s.Stype.Tty,e);
+                }
             }
             else if (ISREF(se.var, tb))
             {

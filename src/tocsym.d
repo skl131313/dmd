@@ -136,6 +136,14 @@ Symbol *toSymbol(Dsymbol s)
             //printf("VarDeclaration.toSymbol(%s)\n", vd.toChars());
             assert(!vd.needThis());
 
+            // NOCOMMIT
+            // Windows only, forward import to TLS stub if is TLS and imported
+            if (global.params.isWindows && vd.isThreadlocal() && vd.isImportedSymbol())
+            {
+                visit(vd.tlsAccessor);
+                return;
+            }
+
             Symbol *s;
             if (vd.isDataseg())
             {
