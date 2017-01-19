@@ -847,6 +847,8 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 if(dataSymbolRefs.dim == 0)
                     out_readonly(sd.sinit);
                 outdata(sd.sinit);
+                if(sd.isExport())
+                    objmod.export_data_symbol(sd.sinit);
                 objmod.markCrossDllDataRef(sd.sinit, dataSymbolRefs.data, dataSymbolRefs.dim);
 
                 // Put out the members

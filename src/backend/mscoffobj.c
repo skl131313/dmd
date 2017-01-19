@@ -1257,9 +1257,12 @@ void MsCoffObj::ehsections()
     attr = IMAGE_SCN_CNT_UNINITIALIZED_DATA | IMAGE_SCN_ALIGN_16BYTES | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
     emitSectionBrace(".bss", "_bss", attr, NULL);
 
-    // Dll relocation section
-    attr = IMAGE_SCN_CNT_INITIALIZED_DATA | align | IMAGE_SCN_MEM_READ;
-    emitSectionBrace(".dllra", "_dllra", attr, NULL);
+    if(global.params.useDll)
+    {
+        // Dll relocation section
+        attr = IMAGE_SCN_CNT_INITIALIZED_DATA | align | IMAGE_SCN_MEM_READ;
+        emitSectionBrace(".dllra", "_dllra", attr, NULL);
+    }
 
     /*************************************************************************/
 #if 0
@@ -1796,7 +1799,7 @@ void MsCoffObj::export_data_symbol(Symbol *s)
 void MsCoffObj::markCrossDllDataRef(Symbol *dataSym, DataSymbolRef* refs, targ_size_t numRefs)
 {
     // if the data symbol does not have any cross dll references we don't need to emit any relocation information.
-    if (numRefs == 0)
+    if (numRefs == 0 || !global.params.useDll)
       return;
 
     int align = I64 ? IMAGE_SCN_ALIGN_8BYTES : IMAGE_SCN_ALIGN_4BYTES;  // align to NPTRSIZE
