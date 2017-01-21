@@ -256,7 +256,7 @@
   <otherDMD>1</otherDMD>
   <cccmd>$(CC) -nologo -c -TP -Isrc -Isrc\backend -Isrc\tk -Isrc\root -Isrc\vcbuild -Igenerated -DTARGET_WINDOS=1 -FIvcbuild\warnings.h</cccmd>
   <ccTransOpt>1</ccTransOpt>
-  <program>C:\digital-mars\dmd2-71\windows\bin\dmd.exe</program>
+  <program>C:\digital-mars\dmd2-72\windows\bin\dmd.exe</program>
   <imppath />
   <fileImppath>generated ..\..\res</fileImppath>
   <outdir>generated\$(ConfigurationName)_$(PlatformName)</outdir>
@@ -462,6 +462,7 @@
     <File path="..\root\ctfloat.d" />
     <File path="..\root\file.d" />
     <File path="..\root\filename.d" />
+    <File path="..\root\hash.d" />
     <File path="..\root\man.d" />
     <File path="..\root\outbuffer.d" />
     <File path="..\root\port.d" />
