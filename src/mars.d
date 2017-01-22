@@ -224,19 +224,19 @@ extern (C++) void genCmain(Scope* sc)
     };
     static if (TARGET_WINDOS)
     {
-        // Note: _d_dll_fixup must be called before _d_run_main because _d_run_main is within the druntime.dll. 
+        // Note: _d_dll_fixup must be called before _d_run_main because _d_run_main is within the druntime.dll.
         // But _d_dll_fixup needs access to the executable local symbols to access the executables sections.
-        immutable cmaincodeWin = 
-        q{ 
-            extern(C) 
+        immutable cmaincodeWin =
+        q{
+            extern(C)
             {
                 int _d_run_main(int argc, char **argv, void* mainFunc);
                 int _Dmain(char[][] args);
                 void _d_dll_fixup(void*);
-                int main(int argc, char **argv) 
-                {        
+                int main(int argc, char **argv)
+                {
                     _d_dll_fixup(null);
-                    return _d_run_main(argc, argv, &_Dmain); 
+                    return _d_run_main(argc, argv, &_Dmain);
                 }
             }
         };
@@ -1127,11 +1127,11 @@ Language changes listed by -transition=id:
         // -shared implies -useShared
         if (global.params.dll)
             global.params.useDll = true;
-    
+
         // full dll support is currently only implemented when targeting the microsoft linker
         if (global.params.useDll && !global.params.mscoff)
             global.params.useDll = false;
-            
+
         if (!global.params.mscrtlib)
         {
             global.params.mscrtlib = global.params.useDll ? "msvcrt" : "libcmt";
@@ -1931,7 +1931,7 @@ private void setDefaultLibrary()
             else
                 global.params.defaultlibname = "phobos";
 
-            if(global.params.dll)
+            if(global.params.useDll)
                 global.params.defaultlibname = (global.params.defaultlibname[0..strlen(global.params.defaultlibname)] ~ "s\0").ptr;
         }
         else static if (TARGET_LINUX || TARGET_FREEBSD || TARGET_OPENBSD || TARGET_SOLARIS)
