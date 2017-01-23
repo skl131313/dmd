@@ -245,7 +245,7 @@ extern (C++) void genCmain(Scope* sc)
     auto m = new Module("__entrypoint.d", id, 0, 0);
     static if (TARGET_WINDOS)
     {
-        auto cmaincode = global.params.betterC ? cmaincodeGeneric : cmaincodeWin;
+        auto cmaincode = (!global.params.mscoff || !global.params.useDll || global.params.betterC) ? cmaincodeGeneric : cmaincodeWin;
     }
     else
     {
