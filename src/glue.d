@@ -979,7 +979,7 @@ void FuncDeclaration_toObjFile(FuncDeclaration fd, bool multiobj)
             if (global.params.isLinux || global.params.isOSX || global.params.isFreeBSD ||
                 global.params.isOpenBSD || global.params.isSolaris)
             {
-				objmod.ehsections();   // initialize exception handling sections
+                objmod.ehsections();   // initialize exception handling sections
             }
             else if(global.params.mscoff && !global.params.useDll)
             {
