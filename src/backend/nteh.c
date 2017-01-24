@@ -107,9 +107,7 @@ void nteh_gentables()
     symbol *s = s_table;
     symbol_debug(s);
 
-#if MARS
-    //except_gentables(s);
-#else
+#ifndef MARS
     /* NTEH table for C.
      * The table consists of triples:
      *  parent index
