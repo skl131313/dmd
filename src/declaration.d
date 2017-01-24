@@ -2057,7 +2057,7 @@ extern (C++) class VarDeclaration : Declaration
             return false;
         if (storage_class & STCexport) // if directly exported, even if private
             return true;
-        if (protection.kind <= PROTprivate) // not accessible, no need to check parents 
+        if (protection.kind <= PROTprivate) // not accessible, no need to check parents
             return false;
         // check if any of the parents is a class/struct and if they are exported
         Dsymbol realParent = parent;
@@ -2548,13 +2548,14 @@ extern (C++) class TypeInfoDeclaration : VarDeclaration
         // For builtin type infos forward to the actual implementation.
         if (builtinTypeInfo(tinfo))
             return type.toDsymbol(null).isExport();
-        // find the end of the type chain
+        // The typeinfo might be for const(T)[] but we need T in order to check if T exports or not
+        // Stop following the typechain at enums. Because we wan't the symbol for the enum itself and not for its basetype.
         Type baseType = tinfo;
-        for (Type nextType = baseType.nextOf(); nextType !is null; nextType = baseType.nextOf())
+        for (Type nextType = baseType; nextType !is null && nextType.ty != Tenum; nextType = baseType.nextOf())
         {
-          baseType = nextType;
+            baseType = nextType;
         }
-        // if we get a symbol its user defined and we can check if the user defined exports or not
+        // if we get a symbol its user defined and we can check if the user made it export or not
         // if we don't get a symbol is a builtin type and we always export
         Dsymbol sym = baseType.toDsymbol(null);
         return (sym !is null) ? sym.isExport() : true;
