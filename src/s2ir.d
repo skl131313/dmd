@@ -1253,7 +1253,7 @@ extern (C++) class S2irVisitor : Visitor
                     bcatch.Bcatchimported = false;
                     ClassDeclaration basetypeClass = basetype.isClassHandle();
                     assert(basetypeClass !is null); // D can only catch classes
-                    if (global.params.mscoff && global.params.useDll && basetypeClass.isImportedSymbol())
+                    if (global.params.useDll && basetypeClass.isImportedSymbol())
                     {
                         bcatch.Bcatchimported = true;
                         bcatch.Bcatchtype = toImport(basetypeClass);
