@@ -106,7 +106,7 @@ private void dtxoffInitializer(T)(DtBuilder dtb, T d, uint offset, Array!(DataSy
     {
         dtb.xoff(toInitializer(d), offset);
     }
-} 
+}
 
 private void offsetDataSymbolRefs(DataSymbolRef[] dataSymbolRefs, uint offset)
 {
@@ -690,7 +690,7 @@ extern (C++) void cpp_type_info_ptr_toDt(ClassDeclaration cd, DtBuilder dtb, Arr
     assert(cd.isCPPclass());
 
     // Put in first two members, the vtbl[] and the monitor
-    dtxoffVtbl(dtb, ClassDeclaration.cpp_type_info_ptr, dataSymbolRefs); 
+    dtxoffVtbl(dtb, ClassDeclaration.cpp_type_info_ptr, dataSymbolRefs);
     dtb.size(0);             // monitor
 
     // Create symbol for C++ type info
@@ -1062,7 +1062,7 @@ extern (C++) class TypeInfoDtVisitor : Visitor
         Type tm = d.tinfo.mutableOf();
         tm = tm.merge();
         genTypeInfo(tm, null);
-        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs); 
+        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs);
     }
 
     override void visit(TypeInfoInvariantDeclaration d)
@@ -1075,7 +1075,7 @@ extern (C++) class TypeInfoDtVisitor : Visitor
         Type tm = d.tinfo.mutableOf();
         tm = tm.merge();
         genTypeInfo(tm, null);
-        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs); 
+        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs);
     }
 
     override void visit(TypeInfoSharedDeclaration d)
@@ -1088,7 +1088,7 @@ extern (C++) class TypeInfoDtVisitor : Visitor
         Type tm = d.tinfo.unSharedOf();
         tm = tm.merge();
         genTypeInfo(tm, null);
-        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs); 
+        dtxoffDsymbol(dtb, tm.vtinfo, 0, dataSymbolRefs);
     }
 
     override void visit(TypeInfoWildDeclaration d)
