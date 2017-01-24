@@ -1504,7 +1504,7 @@ extern (C++) class TypeInfoDtVisitor : Visitor
             Parameter arg = (*tu.arguments)[i];
 
             genTypeInfo(arg.type, null);
-            dtxoffDsymbol(dtb, arg.type.vtinfo, 0, dataSymbolRefs);
+            dtxoffDsymbol(dtbargs, arg.type.vtinfo, 0, dataSymbolRefs);
         }
 
         dtb.dtoff(dtbargs.finish(), 0);                  // elements.ptr
