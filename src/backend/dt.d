@@ -13,6 +13,9 @@ module ddmd.backend.dt;
 import ddmd.backend.cc;
 import ddmd.backend.ty;
 import ddmd.backend.type;
+import ddmd.backend.obj;
+
+import ddmd.root.array;
 
 //struct Symbol;
 //alias uint tym_t;
@@ -55,7 +58,7 @@ final:
     void xoff(Symbol* s, uint offset, tym_t ty);
     dt_t* xoffpatch(Symbol* s, uint offset, tym_t ty);
     void xoff(Symbol* s, uint offset);
-    void dtoff(dt_t* dt, uint offset);
+    void dtoff(dt_t* dt, uint offset, Array!(DataSymbolRef)* dataSymbolRefs = null);
     void coff(uint offset);
     void cat(dt_t* dt);
     void cat(DtBuilder dtb);

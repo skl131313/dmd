@@ -1499,15 +1499,16 @@ extern (C++) class TypeInfoDtVisitor : Visitor
         dtb.size(dim);                       // elements.length
 
         scope dtbargs = new DtBuilder();
+        Array!(DataSymbolRef) dataSymbolRefsArgs;
         for (size_t i = 0; i < dim; i++)
         {
             Parameter arg = (*tu.arguments)[i];
 
             genTypeInfo(arg.type, null);
-            dtxoffDsymbol(dtbargs, arg.type.vtinfo, 0, dataSymbolRefs);
+            dtxoffDsymbol(dtbargs, arg.type.vtinfo, 0, &dataSymbolRefsArgs);
         }
 
-        dtb.dtoff(dtbargs.finish(), 0);                  // elements.ptr
+        dtb.dtoff(dtbargs.finish(), 0, &dataSymbolRefsArgs);                  // elements.ptr
     }
 }
 

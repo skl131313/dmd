@@ -412,7 +412,7 @@ dt_t *DtBuilder::xoffpatch(Symbol *s, unsigned offset, tym_t ty)
 /*************************************
  * Create a reference to another dt.
  */
-void DtBuilder::dtoff(dt_t *dt, unsigned offset)
+void DtBuilder::dtoff(dt_t *dt, unsigned offset, Array<DataSymbolRef>* dataSymbolRefs)
 {
     type *t = type_alloc(TYint);
     t->Tcount++;
@@ -423,6 +423,10 @@ void DtBuilder::dtoff(dt_t *dt, unsigned offset)
     s->Stype = t;
     s->Sdt = dt;
     outdata(s);
+    if (dataSymbolRefs != NULL)
+    {
+        objmod->markCrossDllDataRef(s, dataSymbolRefs->data, dataSymbolRefs->dim);
+    }
 
     xoff(s, offset);
 }
