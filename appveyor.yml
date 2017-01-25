@@ -77,9 +77,9 @@ build_script:
   - cd c:\projects\dmd\src
   - make -f win32.mak HOST_DC="%D_COMPILER%" CC="c:\projects\dm\bin\dmc" LIB="c:\projects\dm\bin\lib"
   - cd c:\projects\druntime
-  - if "%APPVEYOR_JOB_ARCH%"=="x64" (call make -f win64.mak DMD=../dmd/src/dmd) else (call make -f win64.mak druntime32mscoff DMD=../dmd/src/dmd)
+  - ps: if ($enc:APPVEYOR_JOB_ARCH -eq "x64") { make -f win64.mak DMD=../dmd/src/dmd } else { make -f win64.mak druntime32mscoff DMD=../dmd/src/dmd }
   - cd c:\projects\phobos
-  - if "%APPVEYOR_JOB_ARCH%"=="x64" (call make -f win64.mak DMD=../dmd/src/dmd) else (call make -f win64.mak phobos32mscoff DMD=../dmd/src/dmd)
+  - if "%APPVEYOR_JOB_ARCH%"=="x64" (make -f win64.mak DMD=../dmd/src/dmd) else (make -f win64.mak phobos32mscoff DMD=../dmd/src/dmd)
 
 after_build:
   - ps: 'echo after_build'
