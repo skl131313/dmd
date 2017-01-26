@@ -951,6 +951,8 @@ void MsCoffObj::term(const char *objfilename)
                                 rel.r_type = IMAGE_REL_I386_SECTION;
                             else if (r->rtype == RELaddr32)
                                 rel.r_type = IMAGE_REL_I386_SECREL;
+                            else if (r->rtype == RELrel32)
+                                rel.r_type = IMAGE_REL_I386_REL32;
                         }
                         else
                             assert(false); // not implemented for I16
@@ -1848,23 +1850,14 @@ void MsCoffObj::markCrossDllDataRef(Symbol *dataSym, DataSymbolRef* refs, targ_s
     }
 
     Outbuffer *buf = SegData[seg]->SDbuf;
-    if (I64)
+    for (targ_size_t i = 0; i < numRefs; i++)
     {
-        for (targ_size_t i = 0; i < numRefs; i++)
-        {
-            MsCoffObj::addrel(seg, buf->size(), dataSym, 0, RELrel32, 0);
-            buf->write32(refs[i].offsetInDt);
-            buf->write32(refs[i].referenceOffset);
-            //MsCoffObj::reftoident(seg, buf->size(), dataSym, refs[i].offsetInDt, CFoff | CFoffset64);
-        }
-    }
-    else
-    {
-        for (targ_size_t i = 0; i < numRefs; i++)
-        {
-            MsCoffObj::reftoident(seg, buf->size(), dataSym, refs[i].offsetInDt, CFoff);
-            buf->write32(refs[i].referenceOffset);
-        }
+        // We use relative offsets both in 32-bit and 64-bit
+        // In 64-bit they safe executable size (compared to full 64-bit pointers)
+        // In 32-bit they prevent a excessive amount of "real" dll relocations.
+        MsCoffObj::addrel(seg, buf->size(), dataSym, 0, RELrel32, 0);
+        buf->write32(refs[i].offsetInDt);
+        buf->write32(refs[i].referenceOffset);
     }
 }
 

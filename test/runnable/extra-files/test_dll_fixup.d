@@ -5,7 +5,7 @@ import test_dll_fixup_a;
 
 extern(C)
 {
-    extern __gshared void* _dllra_beg; // actually a DllRealloc** (c array of c array of DllRealloc)
+    extern __gshared void* _dllra_beg;
     extern __gshared void* _dllra_end;
 }
 
@@ -26,23 +26,13 @@ void fixupDataSymbols()
     {
         if(*outer !is null) // skip any padding
         {
-            // For 64-bit we actually store the address as 32-bit offset instead of a 64-bit pointer
-            version(Win64)
-            {
-                int* start = cast(int*)outer;
-                int relAddress = (*start) + 4; // take size of the offset into account as well
-                int offset = *(start+1);
-                void** reconstructedAddress = cast(void**)(cast(void*)start + relAddress);
-                *reconstructedAddress = (**cast(void***)reconstructedAddress) + offset;
-                outer++;
-            }
-            else
-            {
-                void** address = *cast(void***)outer;
-                size_t offset = *cast(size_t*)(outer+1);
-                *address = (**cast(void***)address) + offset;
-                outer += 2;
-            }
+            // The address is stored as a 32-bit offset
+            int* start = cast(int*)outer;
+            int relAddress = (*start) + 4; // take size of the offset into account as well
+            int offset = *(start+1);
+            void** reconstructedAddress = cast(void**)(cast(void*)start + relAddress);
+            *reconstructedAddress = (**cast(void***)reconstructedAddress) + offset;
+            outer += 8 / (void*).sizeof;
         }
         else
         {

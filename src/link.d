@@ -813,7 +813,22 @@ version (Windows)
                 // Use process spawning through the WinAPI to avoid issues with executearg0 and spawnlp
                 OutBuffer cmdbuf;
                 cmdbuf.writestring("\"");
-                cmdbuf.writestring(cmd);
+                // write cmd without any quotes
+                {
+                    const(char)* start = cmd;
+                    const(char)* cur = start;
+                    const(char)* end = cmd + strlen(cmd);
+                    while(cur < end)
+                    {
+                        while(cur < end && *cur != '"')
+                        {
+                            cur++;
+                        }
+                        cmdbuf.writestring(start[0..cur-start]); 
+                        cur++;
+                        start = cur;
+                    }
+                }
                 cmdbuf.writestring("\" ");
                 cmdbuf.writestring(args);
 
