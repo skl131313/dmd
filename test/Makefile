@@ -145,12 +145,12 @@ all: run_tests
 ifeq (win64,$(OS))
 RUNNABLE_PHOBOS_DLL=$(RESULTS_DIR)/runnable/phobos64s.dll
 $(RUNNABLE_PHOBOS_DLL):
-	cp $(PHOBOS_PATH)/phobos64s.dll $@
+	cp $(subst \,/,$(PHOBOS_PATH))/phobos64s.dll $@
 endif
 ifeq (win32, $(OS))
 RUNNABLE_PHOBOS_DLL=$(RESULTS_DIR)/runnable/phobos32mscoffs.dll
 $(RUNNABLE_PHOBOS_DLL):
-	cp $(PHOBOS_PATH)/phobos32mscoffs.dll $@
+	cp $(subst \,/,$(PHOBOS_PATH))/phobos32mscoffs.dll $@
 endif
 
 $(RESULTS_DIR)/runnable/%.d.out: runnable/%.d $(RESULTS_DIR)/.created $(RESULTS_DIR)/d_do_test$(EXE) $(DMD)

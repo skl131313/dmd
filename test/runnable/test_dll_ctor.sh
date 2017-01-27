@@ -36,8 +36,7 @@ $DMD -m${winmodel} -of${dmddir}/test_dll_ctor${EXE} runnable/extra-files/test_dl
     -Irunnable/imports ${dmddir}/test_dll_ctor_b.lib ${dmddir}/test_dll_ctor_a.lib >> ${output_file}
 if [ $? -ne 0 ]; then die; fi
 
-desired="druntime loaded
-shared module ctor of b
+desired="shared module ctor of b
 shared module ctor of a
 module ctor of a
 shared module ctor of exe
@@ -45,8 +44,7 @@ main
 shared module dtor of exe
 module dtor of a
 shared module dtor of a
-shared module dtor of b
-druntime unloaded"
+shared module dtor of b"
 
 result=`${dmddir}/test_dll_ctor${EXE} | tr -d '\r'` # need to remove \r from '\r\n' in output to match
 echo "$result" >> ${output_file}
