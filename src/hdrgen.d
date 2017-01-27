@@ -1870,6 +1870,8 @@ public:
             buf.writestring("@nogc ");
         if (d.storage_class & STCdisable)
             buf.writestring("@disable ");
+        if (d.storage_class & STCexport)
+            buf.writestring("export ");
 
         buf.writestring("~this()");
         bodyToBuffer(d);
@@ -2977,6 +2979,8 @@ public:
                 else
                     buf.writestring("deprecated ");
             }
+            if (m.isExport)
+                buf.writestring("export ");
             buf.writestring("module ");
             buf.writestring(m.md.toChars());
             buf.writeByte(';');
