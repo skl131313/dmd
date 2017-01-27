@@ -238,7 +238,7 @@ void genModuleInfo(Module m)
 
     objmod.moduleinfo(msym);
     // export the module info if required
-    if(m.isExport)
+    if(global.params.dll && m.isExport)
         objmod.export_data_symbol(msym);
 }
 
@@ -338,7 +338,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             }
             
             // the init symbol of a type info is referenced directly, so it needs to be exported
-            if (cd.isExport())
+            if (global.params.dll && cd.isExport())
             {
                 ClassDeclaration base = cd.baseClass;
                 while (base)
@@ -583,7 +583,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             cd.csym.Sdt = dtb.finish();
             // ClassInfo cannot be const data, because we use the monitor on it
             outdata(cd.csym);
-            if (cd.isExport())
+            if (global.params.dll && cd.isExport())
                 objmod.export_data_symbol(cd.csym);
             objmod.markCrossDllDataRef(cd.csym, dataSymbolRefsClassInfo.data, dataSymbolRefsClassInfo.dim);
 
@@ -619,7 +619,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             cd.vtblsym.Sfl = FLdata;
             out_readonly(cd.vtblsym);
             outdata(cd.vtblsym);
-            if (cd.isExport())
+            if (global.params.dll && cd.isExport())
                 objmod.export_data_symbol(cd.vtblsym);
         }
 
@@ -797,7 +797,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             if(dataSymbolRefs.dim == 0)
                 out_readonly(id.csym);
             outdata(id.csym);
-            if (id.isExport())
+            if (global.params.dll && id.isExport())
                 objmod.export_data_symbol(id.csym);
             objmod.markCrossDllDataRef(id.csym, dataSymbolRefs.data, dataSymbolRefs.dim);
         }
@@ -847,7 +847,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
                 if(dataSymbolRefs.dim == 0)
                     out_readonly(sd.sinit);
                 outdata(sd.sinit);
-                if(sd.isExport())
+                if(global.params.dll && sd.isExport())
                     objmod.export_data_symbol(sd.sinit);
                 objmod.markCrossDllDataRef(sd.sinit, dataSymbolRefs.data, dataSymbolRefs.dim);
 
@@ -966,7 +966,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             if (sz || objmod.allowZeroSize())
             {
                 outdata(s);
-                if (vd.isExport())
+                if (global.params.dll && vd.isExport())
                     objmod.export_data_symbol(s);
                 objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
             }
@@ -1048,7 +1048,7 @@ void toObjFile(Dsymbol ds, bool multiobj)
             }
 
             outdata(s);
-            if (tid.isExport())
+            if (global.params.dll && tid.isExport())
                 objmod.export_data_symbol(s);
             objmod.markCrossDllDataRef(s, dataSymbolRefs.data, dataSymbolRefs.dim);
         }

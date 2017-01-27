@@ -1743,6 +1743,7 @@ void MsCoffObj::export_symbol(Symbol *s,unsigned argsize)
 
 void MsCoffObj::export_data_symbol(Symbol *s)
 {
+    //printf("MsCoffObj::export_data_symbol(%s)\n", s->Sident);
     // if a data symbol exists the following code generates a indirection symbol
     // e.g:
     // symbol: __gshared int var;
