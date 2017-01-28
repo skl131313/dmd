@@ -264,6 +264,23 @@ void TestStructLiteral()
     assert(a[0].var == 1);
 }
 
+void TestOpEquals()
+{
+	struct Foo
+	{
+		int a;
+		void opAssign(Foo foo)
+		{
+			assert(0);
+		}
+		auto opEquals(Foo foo)
+		{
+			return a == foo.a;
+		}
+	}
+  assert(Foo(1) == Foo(1));
+}
+
 void main(string[] args)
 {
     auto b = new Base();
@@ -335,4 +352,5 @@ void main(string[] args)
 
     assert(lotsAfAttributes() == 1337);
     TestStructLiteral();
+    TestOpEquals();
 }
