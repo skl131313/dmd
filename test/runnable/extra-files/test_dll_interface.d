@@ -281,6 +281,17 @@ void TestOpEquals()
   assert(Foo(1) == Foo(1));
 }
 
+void printargs(int x, ...)
+{
+    auto v = _arguments[0].toString();
+    printf("%.*s\n", v.length, v.ptr);
+}
+
+void TestTupleTypeInfo()
+{
+  printargs(1, 10, 23, 40);
+}
+
 void main(string[] args)
 {
     auto b = new Base();
@@ -353,4 +364,5 @@ void main(string[] args)
     assert(lotsAfAttributes() == 1337);
     TestStructLiteral();
     TestOpEquals();
+    TestTupleTypeInfo();
 }
