@@ -5,16 +5,16 @@ import test_dll_fixup_a;
 
 extern(C)
 {
-    extern __gshared void* _dllra_beg;
-    extern __gshared void* _dllra_end;
+    extern __gshared void* _dllrl_beg;
+    extern __gshared void* _dllrl_end;
 }
 
 extern(C) int printf(in char* format, ...) nothrow;
 
 void fixupDataSymbols()
 {
-    void** begin = &_dllra_beg;
-    void** end = &_dllra_end;
+    void** begin = &_dllrl_beg;
+    void** end = &_dllrl_end;
     void** outer = begin;
 
     while(outer < end && *outer is null)

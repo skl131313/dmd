@@ -224,18 +224,18 @@ extern (C++) void genCmain(Scope* sc)
     };
     static if (TARGET_WINDOS)
     {
-        // Note: _d_dll_fixup must be called before _d_run_main because _d_run_main is within the druntime.dll.
-        // But _d_dll_fixup needs access to the executable local symbols to access the executables sections.
+        // Note: _d_dll_init must be called before _d_run_main because _d_run_main is within the druntime.dll.
+        // But _d_dll_init needs access to the executable local symbols to access the executables sections.
         immutable cmaincodeWin =
         q{
             extern(C)
             {
                 int _d_run_main(int argc, char **argv, void* mainFunc);
                 int _Dmain(char[][] args);
-                void _d_dll_fixup(void*);
+                void _d_dll_init(void*);
                 int main(int argc, char **argv)
                 {
-                    _d_dll_fixup(null);
+                    _d_dll_init(null);
                     return _d_run_main(argc, argv, &_Dmain);
                 }
             }

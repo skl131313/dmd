@@ -1263,7 +1263,7 @@ void MsCoffObj::ehsections()
     {
         // Dll relocation section
         attr = IMAGE_SCN_CNT_INITIALIZED_DATA | align | IMAGE_SCN_MEM_READ;
-        emitSectionBrace(".dllra", "_dllra", attr, NULL);
+        emitSectionBrace(".dllrl", "_dllrl", attr, NULL);
     }
 
     /*************************************************************************/
@@ -1810,7 +1810,7 @@ void MsCoffObj::markCrossDllDataRef(Symbol *dataSym, DataSymbolRef* refs, targ_s
     int linkage = (dataSym->Sclass == SCcomdat) ? IMAGE_SCN_LNK_COMDAT : 0;
 
     const int seg =
-        MsCoffObj::getsegment(".dllra$B", IMAGE_SCN_CNT_INITIALIZED_DATA |
+        MsCoffObj::getsegment(".dllrl$B", IMAGE_SCN_CNT_INITIALIZED_DATA |
         align |
         IMAGE_SCN_MEM_READ | linkage);
 
