@@ -792,6 +792,21 @@ Language changes listed by -transition=id:
                     goto Lerror;
                 }
             }
+            else if (p[1] == 'U')
+            {
+                global.params.doUnittestExtraction = true;
+                switch (p[2])
+                {
+                case 'd':
+                    if (!p[3])
+                        goto Lnoarg;
+                    global.params.unittestdir = p + 3 + (p[3] == '=');
+                    break;
+                case 0:
+                    break;
+                default:
+                }
+            }
             else if (p[1] == 'X')
             {
                 global.params.doJsonGeneration = true;
@@ -1464,6 +1479,14 @@ Language changes listed by -transition=id:
             if (global.params.verbose)
                 fprintf(global.stdmsg, "import    %s\n", m.toChars());
             genhdrfile(m);
+        }
+    }
+    if (global.params.doUnittestExtraction)
+    {
+        for (size_t i = 0; i < modules.dim; i++)
+        {
+            Module m = modules[i];
+            extractUnittests(m);
         }
     }
     if (global.errors)

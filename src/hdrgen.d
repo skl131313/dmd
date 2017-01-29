@@ -54,6 +54,7 @@ struct HdrGenState
     bool hdrgen;        // true if generating header file
     bool ddoc;          // true if generating Ddoc file
     bool fullQual;      // fully qualify types when printing
+    bool extractUnittests;
     int tpltMember;
     int autoMember;
     int forStmtInit;
@@ -1917,7 +1918,7 @@ public:
 
     override void visit(UnitTestDeclaration d)
     {
-        if (hgs.hdrgen)
+        if (hgs.hdrgen && !hgs.extractUnittests)
             return;
         if (stcToBuffer(buf, d.storage_class))
             buf.writeByte(' ');
@@ -2210,7 +2211,7 @@ public:
          Plus one for rounding. */
         const(size_t) BUFFER_LEN = value.sizeof * 3 + 8 + 1 + 1;
         char[BUFFER_LEN] buffer;
-        CTFloat.sprint(buffer.ptr, 'g', value);
+        CTFloat.sprint(buffer.ptr, 'e', value);
         assert(strlen(buffer.ptr) < BUFFER_LEN);
         if (hgs.hdrgen)
         {
@@ -3271,4 +3272,487 @@ extern (C++) const(char)* parametersTypeToChars(Parameters* parameters, int vara
     scope PrettyPrintVisitor v = new PrettyPrintVisitor(&buf, &hgs);
     v.parametersToBuffer(parameters, varargs);
     return buf.extractString();
+}
+
+void extractUnittests(Module m)
+{
+    extern (C++) final class ExtractImportVisitor : Visitor
+    {
+        alias visit = super.visit;
+        OutBuffer* buf;
+
+        this(OutBuffer* buf)
+        {
+            this.buf = buf;
+        }
+
+        override void visit(Dsymbol s)
+        {
+        }
+
+
+
+        override void visit(Module m)
+        {
+            foreach (s; *m.members)
+            {
+                s.accept(this);
+            }
+        }
+
+
+
+        override void visit(Import imp)
+        {
+            HdrGenState hgs;
+            scope PrettyPrintVisitor v = new PrettyPrintVisitor(buf, &hgs);
+            imp.accept(v);
+        }
+
+    }
+
+    extern (C++) final class ExtractUnittestVisitor : Visitor
+    {
+        alias visit = super.visit;
+        Module m;
+        OutBuffer* impbuf;
+
+        this(Module m, OutBuffer* impbuf)
+        {
+            this.m = m;
+            this.impbuf = impbuf;
+        }
+
+        override void visit(Dsymbol s)
+        {
+            // printf("%s -- %s\n", s.toChars(), getTypeString(s));
+        }
+
+        override void visit(StructDeclaration d)
+        {
+            if (!d.members)
+            {
+                return;
+            }
+            foreach (s; *d.members)
+                s.accept(this);
+        }
+
+        override void visit(ClassDeclaration d)
+        {
+            if (d.members)
+            {
+                foreach (s; *d.members)
+                    s.accept(this);
+            }
+        }
+
+        override void visit(ScopeStatement s)
+        {
+            if (s.statement)
+                s.statement.accept(this);
+        }
+
+        override void visit(LabelStatement s)
+        {
+            if (s.statement)
+                s.statement.accept(this);
+        }
+
+        override void visit(Condition c)
+        {
+            // printf("%s -- %s\n", c.toChars(), getTypeString(c));
+        }
+
+        override void visit(AttribDeclaration d)
+        {
+            if (!d.decl)
+            {
+                return;
+            }
+            if (d.decl.dim == 0)
+            {
+            }
+            else if (d.decl.dim == 1)
+            {
+                (*d.decl)[0].accept(this);
+                return;
+            }
+            else
+            {
+                foreach (de; *d.decl)
+                    de.accept(this);
+            }
+        }
+
+        override void visit(ConditionalDeclaration d)
+        {
+            d.condition.accept(this);
+            if (d.decl || d.elsedecl)
+            {
+                if (d.decl)
+                {
+                    foreach (de; *d.decl)
+                        de.accept(this);
+                }
+                if (d.elsedecl)
+                {
+                    foreach (de; *d.elsedecl)
+                        de.accept(this);
+                }
+            }
+        }
+
+        override void visit(ProtDeclaration d)
+        {
+            visit(cast(AttribDeclaration)d);
+        }
+
+        override void visit(Module m)
+        {
+            foreach (s; *m.members)
+            {
+                // printf("m --- %s --- %s\n", s.toChars(), getTypeString(s));
+                s.accept(this);
+            }
+        }
+
+        override void visit(UnitTestDeclaration d)
+        {
+            import ddmd.root.filename;
+            OutBuffer buf;
+            HdrGenState hgs;
+
+            buf.doindent = 1;
+            buf.writenl();
+
+            buf.printf("import %s;", m.md.toChars());
+            buf.writenl();
+            buf.writenl();
+
+            buf.printf(impbuf.peekString());
+            buf.writenl();
+            buf.writenl();
+
+            buf.printf("// line %d", d.loc.linnum);
+            buf.writenl();
+
+            hgs.hdrgen = true;
+            hgs.extractUnittests = true;
+
+            scope PrettyPrintVisitor v = new PrettyPrintVisitor(&buf, &hgs);
+            d.accept(v);
+
+            OutBuffer name;
+            name.printf("%s%d", FileName.removeExt(FileName.name(m.arg)), d.loc.linnum);
+
+            // printf("%s\n", name.peekString());
+
+            auto outfile = m.setOutfile(null, global.params.unittestdir, name.peekString(), "d");
+
+            outfile.setbuffer(buf.data, buf.offset);
+            buf.extractData();
+            ensurePathToNameExists(Loc(), outfile.toChars());
+            writeFile(m.loc, outfile);
+        }
+    }
+
+    bool old = global.params.hdrStripPlainFunctions;
+
+    global.params.hdrStripPlainFunctions = false;
+
+    OutBuffer impbuf;
+    scope ExtractImportVisitor impv = new ExtractImportVisitor(&impbuf);
+    scope ExtractUnittestVisitor v = new ExtractUnittestVisitor(m, &impbuf);
+
+    m.accept(impv);
+    m.accept(v);
+
+    global.params.hdrStripPlainFunctions = old;
+
+}
+
+const(char)* getTypeString(T)(T s)
+{
+    extern (C++) class GetTypeStringVisitor : Visitor
+    {
+        alias visit = super.visit;
+
+        const(char)* result;
+
+        override void visit(Statement) { result = "Statement"; }
+        override void visit(ErrorStatement s) { visit(cast(Statement)s); result = "ErrorStatement"; }
+        override void visit(PeelStatement s) { visit(cast(Statement)s); result = "PeelStatement"; }
+        override void visit(ExpStatement s) { visit(cast(Statement)s); result = "ExpStatement"; }
+        override void visit(DtorExpStatement s) { visit(cast(ExpStatement)s); result = "DtorExpStatement"; }
+        override void visit(CompileStatement s) { visit(cast(Statement)s); result = "CompileStatement"; }
+        override void visit(CompoundStatement s) { visit(cast(Statement)s); result = "CompoundStatement"; }
+        override void visit(CompoundDeclarationStatement s) { visit(cast(CompoundStatement)s); result = "CompoundDeclarationStatement"; }
+        override void visit(UnrolledLoopStatement s) { visit(cast(Statement)s); result = "UnrolledLoopStatement"; }
+        override void visit(ScopeStatement s) { visit(cast(Statement)s); result = "ScopeStatement"; }
+        override void visit(WhileStatement s) { visit(cast(Statement)s); result = "WhileStatement"; }
+        override void visit(DoStatement s) { visit(cast(Statement)s); result = "DoStatement"; }
+        override void visit(ForStatement s) { visit(cast(Statement)s); result = "ForStatement"; }
+        override void visit(ForeachStatement s) { visit(cast(Statement)s); result = "ForeachStatement"; }
+        override void visit(ForeachRangeStatement s) { visit(cast(Statement)s); result = "ForeachRangeStatement"; }
+        override void visit(IfStatement s) { visit(cast(Statement)s); result = "IfStatement"; }
+        override void visit(ConditionalStatement s) { visit(cast(Statement)s); result = "ConditionalStatement"; }
+        override void visit(PragmaStatement s) { visit(cast(Statement)s); result = "PragmaStatement"; }
+        override void visit(StaticAssertStatement s) { visit(cast(Statement)s); result = "StaticAssertStatement"; }
+        override void visit(SwitchStatement s) { visit(cast(Statement)s); result = "SwitchStatement"; }
+        override void visit(CaseStatement s) { visit(cast(Statement)s); result = "CaseStatement"; }
+        override void visit(CaseRangeStatement s) { visit(cast(Statement)s); result = "CaseRangeStatement"; }
+        override void visit(DefaultStatement s) { visit(cast(Statement)s); result = "DefaultStatement"; }
+        override void visit(GotoDefaultStatement s) { visit(cast(Statement)s); result = "GotoDefaultStatement"; }
+        override void visit(GotoCaseStatement s) { visit(cast(Statement)s); result = "GotoCaseStatement"; }
+        override void visit(SwitchErrorStatement s) { visit(cast(Statement)s); result = "SwitchErrorStatement"; }
+        override void visit(ReturnStatement s) { visit(cast(Statement)s); result = "ReturnStatement"; }
+        override void visit(BreakStatement s) { visit(cast(Statement)s); result = "BreakStatement"; }
+        override void visit(ContinueStatement s) { visit(cast(Statement)s); result = "ContinueStatement"; }
+        override void visit(SynchronizedStatement s) { visit(cast(Statement)s); result = "SynchronizedStatement"; }
+        override void visit(WithStatement s) { visit(cast(Statement)s); result = "WithStatement"; }
+        override void visit(TryCatchStatement s) { visit(cast(Statement)s); result = "TryCatchStatement"; }
+        override void visit(TryFinallyStatement s) { visit(cast(Statement)s); result = "TryFinallyStatement"; }
+        override void visit(OnScopeStatement s) { visit(cast(Statement)s); result = "OnScopeStatement"; }
+        override void visit(ThrowStatement s) { visit(cast(Statement)s); result = "ThrowStatement"; }
+        override void visit(DebugStatement s) { visit(cast(Statement)s); result = "DebugStatement"; }
+        override void visit(GotoStatement s) { visit(cast(Statement)s); result = "GotoStatement"; }
+        override void visit(LabelStatement s) { visit(cast(Statement)s); result = "LabelStatement"; }
+        override void visit(AsmStatement s) { visit(cast(Statement)s); result = "AsmStatement"; }
+        override void visit(CompoundAsmStatement s) { visit(cast(CompoundStatement)s); result = "CompoundAsmStatement"; }
+        override void visit(ImportStatement s) { visit(cast(Statement)s); result = "ImportStatement"; }
+        override void visit(Type) { result = "Type"; }
+        override void visit(TypeError t) { visit(cast(Type)t); result = "TypeError"; }
+        override void visit(TypeNext t) { visit(cast(Type)t); result = "TypeNext"; }
+        override void visit(TypeBasic t) { visit(cast(Type)t); result = "TypeBasic"; }
+        override void visit(TypeVector t) { visit(cast(Type)t); result = "TypeVector"; }
+        override void visit(TypeArray t) { visit(cast(TypeNext)t); result = "TypeArray"; }
+        override void visit(TypeSArray t) { visit(cast(TypeArray)t); result = "TypeSArray"; }
+        override void visit(TypeDArray t) { visit(cast(TypeArray)t); result = "TypeDArray"; }
+        override void visit(TypeAArray t) { visit(cast(TypeArray)t); result = "TypeAArray"; }
+        override void visit(TypePointer t) { visit(cast(TypeNext)t); result = "TypePointer"; }
+        override void visit(TypeReference t) { visit(cast(TypeNext)t); result = "TypeReference"; }
+        override void visit(TypeFunction t) { visit(cast(TypeNext)t); result = "TypeFunction"; }
+        override void visit(TypeDelegate t) { visit(cast(TypeNext)t); result = "TypeDelegate"; }
+        override void visit(TypeQualified t) { visit(cast(Type)t); result = "TypeQualified"; }
+        override void visit(TypeIdentifier t) { visit(cast(TypeQualified)t); result = "TypeIdentifier"; }
+        override void visit(TypeInstance t) { visit(cast(TypeQualified)t); result = "TypeInstance"; }
+        override void visit(TypeTypeof t) { visit(cast(TypeQualified)t); result = "TypeTypeof"; }
+        override void visit(TypeReturn t) { visit(cast(TypeQualified)t); result = "TypeReturn"; }
+        override void visit(TypeStruct t) { visit(cast(Type)t); result = "TypeStruct"; }
+        override void visit(TypeEnum t) { visit(cast(Type)t); result = "TypeEnum"; }
+        override void visit(TypeClass t) { visit(cast(Type)t); result = "TypeClass"; }
+        override void visit(TypeTuple t) { visit(cast(Type)t); result = "TypeTuple"; }
+        override void visit(TypeSlice t) { visit(cast(TypeNext)t); result = "TypeSlice"; }
+        override void visit(TypeNull t) { visit(cast(Type)t); result = "TypeNull"; }
+        override void visit(Dsymbol) { result = "Dsymbol"; }
+        override void visit(StaticAssert s) { visit(cast(Dsymbol)s); result = "StaticAssert"; }
+        override void visit(DebugSymbol s) { visit(cast(Dsymbol)s); result = "DebugSymbol"; }
+        override void visit(VersionSymbol s) { visit(cast(Dsymbol)s); result = "VersionSymbol"; }
+        override void visit(EnumMember s) { visit(cast(VarDeclaration)s); result = "EnumMember"; }
+        override void visit(Import s) { visit(cast(Dsymbol)s); result = "Import"; }
+        override void visit(OverloadSet s) { visit(cast(Dsymbol)s); result = "OverloadSet"; }
+        override void visit(LabelDsymbol s) { visit(cast(Dsymbol)s); result = "LabelDsymbol"; }
+        override void visit(AliasThis s) { visit(cast(Dsymbol)s); result = "AliasThis"; }
+        override void visit(AttribDeclaration s) { visit(cast(Dsymbol)s); result = "AttribDeclaration"; }
+        override void visit(StorageClassDeclaration s) { visit(cast(AttribDeclaration)s); result = "StorageClassDeclaration"; }
+        override void visit(DeprecatedDeclaration s) { visit(cast(StorageClassDeclaration)s); result = "DeprecatedDeclaration"; }
+        override void visit(LinkDeclaration s) { visit(cast(AttribDeclaration)s); result = "LinkDeclaration"; }
+        override void visit(CPPMangleDeclaration s) { visit(cast(AttribDeclaration)s); result = "CPPMangleDeclaration"; }
+        override void visit(ProtDeclaration s) { visit(cast(AttribDeclaration)s); result = "ProtDeclaration"; }
+        override void visit(AlignDeclaration s) { visit(cast(AttribDeclaration)s); result = "AlignDeclaration"; }
+        override void visit(AnonDeclaration s) { visit(cast(AttribDeclaration)s); result = "AnonDeclaration"; }
+        override void visit(PragmaDeclaration s) { visit(cast(AttribDeclaration)s); result = "PragmaDeclaration"; }
+        override void visit(ConditionalDeclaration s) { visit(cast(AttribDeclaration)s); result = "ConditionalDeclaration"; }
+        override void visit(StaticIfDeclaration s) { visit(cast(ConditionalDeclaration)s); result = "StaticIfDeclaration"; }
+        override void visit(CompileDeclaration s) { visit(cast(AttribDeclaration)s); result = "CompileDeclaration"; }
+        override void visit(UserAttributeDeclaration s) { visit(cast(AttribDeclaration)s); result = "UserAttributeDeclaration"; }
+        override void visit(ScopeDsymbol s) { visit(cast(Dsymbol)s); result = "ScopeDsymbol"; }
+        override void visit(TemplateDeclaration s) { visit(cast(ScopeDsymbol)s); result = "TemplateDeclaration"; }
+        override void visit(TemplateInstance s) { visit(cast(ScopeDsymbol)s); result = "TemplateInstance"; }
+        override void visit(TemplateMixin s) { visit(cast(TemplateInstance)s); result = "TemplateMixin"; }
+        override void visit(EnumDeclaration s) { visit(cast(ScopeDsymbol)s); result = "EnumDeclaration"; }
+        override void visit(Package s) { visit(cast(ScopeDsymbol)s); result = "Package"; }
+        override void visit(Module s) { visit(cast(Package)s); result = "Module"; }
+        override void visit(WithScopeSymbol s) { visit(cast(ScopeDsymbol)s); result = "WithScopeSymbol"; }
+        override void visit(ArrayScopeSymbol s) { visit(cast(ScopeDsymbol)s); result = "ArrayScopeSymbol"; }
+        override void visit(Nspace s) { visit(cast(ScopeDsymbol)s); result = "Nspace"; }
+        override void visit(AggregateDeclaration s) { visit(cast(ScopeDsymbol)s); result = "AggregateDeclaration"; }
+        override void visit(StructDeclaration s) { visit(cast(AggregateDeclaration)s); result = "StructDeclaration"; }
+        override void visit(UnionDeclaration s) { visit(cast(StructDeclaration)s); result = "UnionDeclaration"; }
+        override void visit(ClassDeclaration s) { visit(cast(AggregateDeclaration)s); result = "ClassDeclaration"; }
+        override void visit(InterfaceDeclaration s) { visit(cast(ClassDeclaration)s); result = "InterfaceDeclaration"; }
+        override void visit(Declaration s) { visit(cast(Dsymbol)s); result = "Declaration"; }
+        override void visit(TupleDeclaration s) { visit(cast(Declaration)s); result = "TupleDeclaration"; }
+        override void visit(AliasDeclaration s) { visit(cast(Declaration)s); result = "AliasDeclaration"; }
+        override void visit(OverDeclaration s) { visit(cast(Declaration)s); result = "OverDeclaration"; }
+        override void visit(VarDeclaration s) { visit(cast(Declaration)s); result = "VarDeclaration"; }
+        override void visit(SymbolDeclaration s) { visit(cast(Declaration)s); result = "SymbolDeclaration"; }
+        override void visit(ThisDeclaration s) { visit(cast(VarDeclaration)s); result = "ThisDeclaration"; }
+        override void visit(TypeInfoDeclaration s) { visit(cast(VarDeclaration)s); result = "TypeInfoDeclaration"; }
+        override void visit(TypeInfoStructDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoStructDeclaration"; }
+        override void visit(TypeInfoClassDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoClassDeclaration"; }
+        override void visit(TypeInfoInterfaceDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoInterfaceDeclaration"; }
+        override void visit(TypeInfoPointerDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoPointerDeclaration"; }
+        override void visit(TypeInfoArrayDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoArrayDeclaration"; }
+        override void visit(TypeInfoStaticArrayDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoStaticArrayDeclaration"; }
+        override void visit(TypeInfoAssociativeArrayDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoAssociativeArrayDeclaration"; }
+        override void visit(TypeInfoEnumDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoEnumDeclaration"; }
+        override void visit(TypeInfoFunctionDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoFunctionDeclaration"; }
+        override void visit(TypeInfoDelegateDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoDelegateDeclaration"; }
+        override void visit(TypeInfoTupleDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoTupleDeclaration"; }
+        override void visit(TypeInfoConstDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoConstDeclaration"; }
+        override void visit(TypeInfoInvariantDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoInvariantDeclaration"; }
+        override void visit(TypeInfoSharedDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoSharedDeclaration"; }
+        override void visit(TypeInfoWildDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoWildDeclaration"; }
+        override void visit(TypeInfoVectorDeclaration s) { visit(cast(TypeInfoDeclaration)s); result = "TypeInfoVectorDeclaration"; }
+        override void visit(FuncDeclaration s) { visit(cast(Declaration)s); result = "FuncDeclaration"; }
+        override void visit(FuncAliasDeclaration s) { visit(cast(FuncDeclaration)s); result = "FuncAliasDeclaration"; }
+        override void visit(FuncLiteralDeclaration s) { visit(cast(FuncDeclaration)s); result = "FuncLiteralDeclaration"; }
+        override void visit(CtorDeclaration s) { visit(cast(FuncDeclaration)s); result = "CtorDeclaration"; }
+        override void visit(PostBlitDeclaration s) { visit(cast(FuncDeclaration)s); result = "PostBlitDeclaration"; }
+        override void visit(DtorDeclaration s) { visit(cast(FuncDeclaration)s); result = "DtorDeclaration"; }
+        override void visit(StaticCtorDeclaration s) { visit(cast(FuncDeclaration)s); result = "StaticCtorDeclaration"; }
+        override void visit(SharedStaticCtorDeclaration s) { visit(cast(StaticCtorDeclaration)s); result = "SharedStaticCtorDeclaration"; }
+        override void visit(StaticDtorDeclaration s) { visit(cast(FuncDeclaration)s); result = "StaticDtorDeclaration"; }
+        override void visit(SharedStaticDtorDeclaration s) { visit(cast(StaticDtorDeclaration)s); result = "SharedStaticDtorDeclaration"; }
+        override void visit(InvariantDeclaration s) { visit(cast(FuncDeclaration)s); result = "InvariantDeclaration"; }
+        override void visit(UnitTestDeclaration s) { visit(cast(FuncDeclaration)s); result = "UnitTestDeclaration"; }
+        override void visit(NewDeclaration s) { visit(cast(FuncDeclaration)s); result = "NewDeclaration"; }
+        override void visit(DeleteDeclaration s) { visit(cast(FuncDeclaration)s); result = "DeleteDeclaration"; }
+        override void visit(Initializer) { result = "Initializer"; }
+        override void visit(VoidInitializer i) { visit(cast(Initializer)i); result = "VoidInitializer"; }
+        override void visit(ErrorInitializer i) { visit(cast(Initializer)i); result = "ErrorInitializer"; }
+        override void visit(StructInitializer i) { visit(cast(Initializer)i); result = "StructInitializer"; }
+        override void visit(ArrayInitializer i) { visit(cast(Initializer)i); result = "ArrayInitializer"; }
+        override void visit(ExpInitializer i) { visit(cast(Initializer)i); result = "ExpInitializer"; }
+        override void visit(Expression) { result = "Expression"; }
+        override void visit(IntegerExp e) { visit(cast(Expression)e); result = "IntegerExp"; }
+        override void visit(ErrorExp e) { visit(cast(Expression)e); result = "ErrorExp"; }
+        override void visit(RealExp e) { visit(cast(Expression)e); result = "RealExp"; }
+        override void visit(ComplexExp e) { visit(cast(Expression)e); result = "ComplexExp"; }
+        override void visit(IdentifierExp e) { visit(cast(Expression)e); result = "IdentifierExp"; }
+        override void visit(DollarExp e) { visit(cast(IdentifierExp)e); result = "DollarExp"; }
+        override void visit(DsymbolExp e) { visit(cast(Expression)e); result = "DsymbolExp"; }
+        override void visit(ThisExp e) { visit(cast(Expression)e); result = "ThisExp"; }
+        override void visit(SuperExp e) { visit(cast(ThisExp)e); result = "SuperExp"; }
+        override void visit(NullExp e) { visit(cast(Expression)e); result = "NullExp"; }
+        override void visit(StringExp e) { visit(cast(Expression)e); result = "StringExp"; }
+        override void visit(TupleExp e) { visit(cast(Expression)e); result = "TupleExp"; }
+        override void visit(ArrayLiteralExp e) { visit(cast(Expression)e); result = "ArrayLiteralExp"; }
+        override void visit(AssocArrayLiteralExp e) { visit(cast(Expression)e); result = "AssocArrayLiteralExp"; }
+        override void visit(StructLiteralExp e) { visit(cast(Expression)e); result = "StructLiteralExp"; }
+        override void visit(TypeExp e) { visit(cast(Expression)e); result = "TypeExp"; }
+        override void visit(ScopeExp e) { visit(cast(Expression)e); result = "ScopeExp"; }
+        override void visit(TemplateExp e) { visit(cast(Expression)e); result = "TemplateExp"; }
+        override void visit(NewExp e) { visit(cast(Expression)e); result = "NewExp"; }
+        override void visit(NewAnonClassExp e) { visit(cast(Expression)e); result = "NewAnonClassExp"; }
+        override void visit(SymbolExp e) { visit(cast(Expression)e); result = "SymbolExp"; }
+        override void visit(SymOffExp e) { visit(cast(SymbolExp)e); result = "SymOffExp"; }
+        override void visit(VarExp e) { visit(cast(SymbolExp)e); result = "VarExp"; }
+        override void visit(OverExp e) { visit(cast(Expression)e); result = "OverExp"; }
+        override void visit(FuncExp e) { visit(cast(Expression)e); result = "FuncExp"; }
+        override void visit(DeclarationExp e) { visit(cast(Expression)e); result = "DeclarationExp"; }
+        override void visit(TypeidExp e) { visit(cast(Expression)e); result = "TypeidExp"; }
+        override void visit(TraitsExp e) { visit(cast(Expression)e); result = "TraitsExp"; }
+        override void visit(HaltExp e) { visit(cast(Expression)e); result = "HaltExp"; }
+        override void visit(IsExp e) { visit(cast(Expression)e); result = "IsExp"; }
+        override void visit(UnaExp e) { visit(cast(Expression)e); result = "UnaExp"; }
+        override void visit(BinExp e) { visit(cast(Expression)e); result = "BinExp"; }
+        override void visit(BinAssignExp e) { visit(cast(BinExp)e); result = "BinAssignExp"; }
+        override void visit(CompileExp e) { visit(cast(UnaExp)e); result = "CompileExp"; }
+        override void visit(ImportExp e) { visit(cast(UnaExp)e); result = "ImportExp"; }
+        override void visit(AssertExp e) { visit(cast(UnaExp)e); result = "AssertExp"; }
+        override void visit(DotIdExp e) { visit(cast(UnaExp)e); result = "DotIdExp"; }
+        override void visit(DotTemplateExp e) { visit(cast(UnaExp)e); result = "DotTemplateExp"; }
+        override void visit(DotVarExp e) { visit(cast(UnaExp)e); result = "DotVarExp"; }
+        override void visit(DotTemplateInstanceExp e) { visit(cast(UnaExp)e); result = "DotTemplateInstanceExp"; }
+        override void visit(DelegateExp e) { visit(cast(UnaExp)e); result = "DelegateExp"; }
+        override void visit(DotTypeExp e) { visit(cast(UnaExp)e); result = "DotTypeExp"; }
+        override void visit(CallExp e) { visit(cast(UnaExp)e); result = "CallExp"; }
+        override void visit(AddrExp e) { visit(cast(UnaExp)e); result = "AddrExp"; }
+        override void visit(PtrExp e) { visit(cast(UnaExp)e); result = "PtrExp"; }
+        override void visit(NegExp e) { visit(cast(UnaExp)e); result = "NegExp"; }
+        override void visit(UAddExp e) { visit(cast(UnaExp)e); result = "UAddExp"; }
+        override void visit(ComExp e) { visit(cast(UnaExp)e); result = "ComExp"; }
+        override void visit(NotExp e) { visit(cast(UnaExp)e); result = "NotExp"; }
+        override void visit(DeleteExp e) { visit(cast(UnaExp)e); result = "DeleteExp"; }
+        override void visit(CastExp e) { visit(cast(UnaExp)e); result = "CastExp"; }
+        override void visit(VectorExp e) { visit(cast(UnaExp)e); result = "VectorExp"; }
+        override void visit(SliceExp e) { visit(cast(UnaExp)e); result = "SliceExp"; }
+        override void visit(ArrayLengthExp e) { visit(cast(UnaExp)e); result = "ArrayLengthExp"; }
+        override void visit(IntervalExp e) { visit(cast(Expression)e); result = "IntervalExp"; }
+        override void visit(DelegatePtrExp e) { visit(cast(UnaExp)e); result = "DelegatePtrExp"; }
+        override void visit(DelegateFuncptrExp e) { visit(cast(UnaExp)e); result = "DelegateFuncptrExp"; }
+        override void visit(ArrayExp e) { visit(cast(UnaExp)e); result = "ArrayExp"; }
+        override void visit(DotExp e) { visit(cast(BinExp)e); result = "DotExp"; }
+        override void visit(CommaExp e) { visit(cast(BinExp)e); result = "CommaExp"; }
+        override void visit(IndexExp e) { visit(cast(BinExp)e); result = "IndexExp"; }
+        override void visit(PostExp e) { visit(cast(BinExp)e); result = "PostExp"; }
+        override void visit(PreExp e) { visit(cast(UnaExp)e); result = "PreExp"; }
+        override void visit(AssignExp e) { visit(cast(BinExp)e); result = "AssignExp"; }
+        override void visit(ConstructExp e) { visit(cast(AssignExp)e); result = "ConstructExp"; }
+        override void visit(BlitExp e) { visit(cast(AssignExp)e); result = "BlitExp"; }
+        override void visit(AddAssignExp e) { visit(cast(BinAssignExp)e); result = "AddAssignExp"; }
+        override void visit(MinAssignExp e) { visit(cast(BinAssignExp)e); result = "MinAssignExp"; }
+        override void visit(MulAssignExp e) { visit(cast(BinAssignExp)e); result = "MulAssignExp"; }
+        override void visit(DivAssignExp e) { visit(cast(BinAssignExp)e); result = "DivAssignExp"; }
+        override void visit(ModAssignExp e) { visit(cast(BinAssignExp)e); result = "ModAssignExp"; }
+        override void visit(AndAssignExp e) { visit(cast(BinAssignExp)e); result = "AndAssignExp"; }
+        override void visit(OrAssignExp e) { visit(cast(BinAssignExp)e); result = "OrAssignExp"; }
+        override void visit(XorAssignExp e) { visit(cast(BinAssignExp)e); result = "XorAssignExp"; }
+        override void visit(PowAssignExp e) { visit(cast(BinAssignExp)e); result = "PowAssignExp"; }
+        override void visit(ShlAssignExp e) { visit(cast(BinAssignExp)e); result = "ShlAssignExp"; }
+        override void visit(ShrAssignExp e) { visit(cast(BinAssignExp)e); result = "ShrAssignExp"; }
+        override void visit(UshrAssignExp e) { visit(cast(BinAssignExp)e); result = "UshrAssignExp"; }
+        override void visit(CatAssignExp e) { visit(cast(BinAssignExp)e); result = "CatAssignExp"; }
+        override void visit(AddExp e) { visit(cast(BinExp)e); result = "AddExp"; }
+        override void visit(MinExp e) { visit(cast(BinExp)e); result = "MinExp"; }
+        override void visit(CatExp e) { visit(cast(BinExp)e); result = "CatExp"; }
+        override void visit(MulExp e) { visit(cast(BinExp)e); result = "MulExp"; }
+        override void visit(DivExp e) { visit(cast(BinExp)e); result = "DivExp"; }
+        override void visit(ModExp e) { visit(cast(BinExp)e); result = "ModExp"; }
+        override void visit(PowExp e) { visit(cast(BinExp)e); result = "PowExp"; }
+        override void visit(ShlExp e) { visit(cast(BinExp)e); result = "ShlExp"; }
+        override void visit(ShrExp e) { visit(cast(BinExp)e); result = "ShrExp"; }
+        override void visit(UshrExp e) { visit(cast(BinExp)e); result = "UshrExp"; }
+        override void visit(AndExp e) { visit(cast(BinExp)e); result = "AndExp"; }
+        override void visit(OrExp e) { visit(cast(BinExp)e); result = "OrExp"; }
+        override void visit(XorExp e) { visit(cast(BinExp)e); result = "XorExp"; }
+        override void visit(OrOrExp e) { visit(cast(BinExp)e); result = "OrOrExp"; }
+        override void visit(AndAndExp e) { visit(cast(BinExp)e); result = "AndAndExp"; }
+        override void visit(CmpExp e) { visit(cast(BinExp)e); result = "CmpExp"; }
+        override void visit(InExp e) { visit(cast(BinExp)e); result = "InExp"; }
+        override void visit(RemoveExp e) { visit(cast(BinExp)e); result = "RemoveExp"; }
+        override void visit(EqualExp e) { visit(cast(BinExp)e); result = "EqualExp"; }
+        override void visit(IdentityExp e) { visit(cast(BinExp)e); result = "IdentityExp"; }
+        override void visit(CondExp e) { visit(cast(BinExp)e); result = "CondExp"; }
+        override void visit(DefaultInitExp e) { visit(cast(Expression)e); result = "DefaultInitExp"; }
+        override void visit(FileInitExp e) { visit(cast(DefaultInitExp)e); result = "FileInitExp"; }
+        override void visit(LineInitExp e) { visit(cast(DefaultInitExp)e); result = "LineInitExp"; }
+        override void visit(ModuleInitExp e) { visit(cast(DefaultInitExp)e); result = "ModuleInitExp"; }
+        override void visit(FuncInitExp e) { visit(cast(DefaultInitExp)e); result = "FuncInitExp"; }
+        override void visit(PrettyFuncInitExp e) { visit(cast(DefaultInitExp)e); result = "PrettyFuncInitExp"; }
+        override void visit(ClassReferenceExp e) { visit(cast(Expression)e); result = "ClassReferenceExp"; }
+        override void visit(VoidInitExp e) { visit(cast(Expression)e); result = "VoidInitExp"; }
+        override void visit(ThrownExceptionExp e) { visit(cast(Expression)e); result = "ThrownExceptionExp"; }
+        override void visit(TemplateParameter) { result = "TemplateParameter"; }
+        override void visit(TemplateTypeParameter tp) { visit(cast(TemplateParameter)tp); result = "TemplateTypeParameter"; }
+        override void visit(TemplateThisParameter tp) { visit(cast(TemplateTypeParameter)tp); result = "TemplateThisParameter"; }
+        override void visit(TemplateValueParameter tp) { visit(cast(TemplateParameter)tp); result = "TemplateValueParameter"; }
+        override void visit(TemplateAliasParameter tp) { visit(cast(TemplateParameter)tp); result = "TemplateAliasParameter"; }
+        override void visit(TemplateTupleParameter tp) { visit(cast(TemplateParameter)tp); result = "TemplateTupleParameter"; }
+        override void visit(Condition) { result = "Condition"; }
+        override void visit(DVCondition c) { visit(cast(Condition)c); result = "DVCondition"; }
+        override void visit(DebugCondition c) { visit(cast(DVCondition)c); result = "DebugCondition"; }
+        override void visit(VersionCondition c) { visit(cast(DVCondition)c); result = "VersionCondition"; }
+        override void visit(StaticIfCondition c) { visit(cast(Condition)c); result = "StaticIfCondition"; }
+        override void visit(Parameter) { result = "Parameter"; }
+    }
+
+    scope GetTypeStringVisitor v = new GetTypeStringVisitor();
+
+    s.accept(v);
+
+    return v.result;
 }

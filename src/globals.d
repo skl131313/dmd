@@ -198,6 +198,9 @@ struct Param
     const(char)* resfile;
     const(char)* exefile;
     const(char)* mapfile;
+
+    bool doUnittestExtraction;
+    const(char)* unittestdir;
 }
 
 struct Compiler
